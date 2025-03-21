@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "group project assignment 2"
+version = "0.1.0"
+description = "For NLP group project"
+authors = ["Cheng-Hsun, Hsu <a10121555@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+nltk = "^3.9.1"
+spacy = "^3.8.4"
+pyquery = "^2.0.1"
+requests = "^2.32.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
