@@ -41,7 +41,7 @@ def prep_question(question: str) -> str:
             else:
                 return match.group(2) + " " + match.group(1)
 
-def tfidf(documents: list[str], query: str) -> list[str]:
+def tfidf(documents: list[str], query: str) -> np.ndarray, np.ndarray:
     clean_docs = data_cleaning(documents)
     unique_words = {word for doc in clean_docs for word in doc.split()}
     word_to_idx = {word: idx for idx, word in enumerate(unique_words)}
@@ -52,7 +52,12 @@ def tfidf(documents: list[str], query: str) -> list[str]:
     df = (tf != 0).sum(axis=0)
     idf = np.log(len(clean_docs) / df) + 1
     tfidf = tf * idf
-    pass
+    query_vector = np.zeros((1, len(unique_words)))
+    for word in data_cleaning(query)[0].split():
+        if word in word_to_idx:
+            query_vector[0, word_to_idx[word]] += 1
+
+    return tfidf, query_vector
 
 def cosine_similarity(vector_a, vector_b):
     """
@@ -83,11 +88,15 @@ def main():
     print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
     while True:
         question = input("Please enter a question: ").lower().replace("?", "")
+        search_object = "Trump"
 
         if question == "exit":
             print("Goodbye!")
             break
         query = prep_question(question)
+        documents = search_wiki(search_object)
+        documents_vector, query_vector = tfidf(documents, query)
+        similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
         
     
 
