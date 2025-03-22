@@ -85,18 +85,18 @@ def cosine_similarity(vector_a, vector_b):
 
     return similarity
 
-def top_3_scores(similarity: list[float]) -> list[int]:
-    """Return the top 3 scores"""
+def top_k_scores(similarity: list[float], k: int) -> list[int]:
+    """Return the top k scores"""
     flat_scores = np.array([s[0] if s != 0 else 0 for s in similarity])
     sorted_indices = np.argsort(flat_scores)[::-1]
-    top_three_indices = sorted_indices[:3]
-    return top_three_indices
+    top_k_indices = sorted_indices[:k]
+    return top_k_indices
 
 def main():
     print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
     while True:
         question = input("Please enter a question: ").lower().replace("?", "")
-        search_object = "Donald_Trump"
+        search_object = "Donald Trump"
 
         if question == "exit":
             print("Goodbye!")
@@ -105,9 +105,9 @@ def main():
         documents = search_wiki(search_object)
         documents_vector, query_vector = tfidf(documents, query)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
-        top_three_indices = top_3_scores(similarity)
+        top_k_indices = top_k_scores(similarity, k = 5)
         print(f"Question: {question}")
-        for idx in top_three_indices:
+        for idx in top_k_indices:
             print(f"Answer: {documents[idx]}")
 
 

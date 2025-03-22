@@ -1,1 +1,2 @@
-# poetry run python -m spacy download en_core_web_sm
+# AIT 526
+## Test question: Who is Donald Trump?
