@@ -21,7 +21,7 @@ def search_wiki(item) -> list[str]:
     return documents
 
 def data_cleaning(documents: list[str]) -> list[str]:
-    """Clean the data by removing special characters"""
+    """Clean the data by removing punctuation, stop words and converting to lowercase"""
     cleaned_docs = []
     for doc in documents:
         doc = nlp(doc.lower())
@@ -36,11 +36,12 @@ def prep_question(question: str) -> str:
         pattern = fr"(?i){t}\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
         if match:
+            breakpoint()
             doc = nlp(match.group(2))
-            if doc[-1].dep_ == "ROOT" and [token.pos_ for token in doc][0] == "VERB":
-                return doc[:-1].text + " " + match.group(1) + " " + doc[-1].text
+            if doc[-1].dep_ == "ROOT" and doc[-1].pos_ == "VERB":
+                return doc[:-1].text + " " + match.group(1) + " " + doc[-1].text, match.group(2)
             else:
-                return match.group(2) + " " + match.group(1)
+                return match.group(2) + " " + match.group(1), match.group(2)
 
 def tfidf(documents: list[str], query: str) -> np.ndarray:
     clean_docs = data_cleaning(documents)
@@ -96,12 +97,11 @@ def main():
     print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
     while True:
         question = input("Please enter a question: ").lower().replace("?", "")
-        search_object = "Donald Trump"
 
         if question == "exit":
             print("Goodbye!")
             break
-        query = prep_question(question)
+        query, search_object = prep_question(question)
         documents = search_wiki(search_object)
         documents_vector, query_vector = tfidf(documents, query)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
