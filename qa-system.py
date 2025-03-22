@@ -1,5 +1,6 @@
 import requests
 from pyquery import PyQuery as pq
+import logging
 import numpy as np
 import spacy
 import re
@@ -36,12 +37,12 @@ def prep_question(question: str) -> str:
         match = re.search(pattern, question)
         if match:
             doc = nlp(match.group(2))
-            if doc[-1].dep_ == "ROOT":
+            if doc[-1].dep_ == "ROOT" and [token.pos_ for token in doc][0] == "VERB":
                 return doc[:-1].text + " " + match.group(1) + " " + doc[-1].text
             else:
                 return match.group(2) + " " + match.group(1)
 
-def tfidf(documents: list[str], query: str) -> np.ndarray, np.ndarray:
+def tfidf(documents: list[str], query: str) -> np.ndarray:
     clean_docs = data_cleaning(documents)
     unique_words = {word for doc in clean_docs for word in doc.split()}
     word_to_idx = {word: idx for idx, word in enumerate(unique_words)}
@@ -53,10 +54,9 @@ def tfidf(documents: list[str], query: str) -> np.ndarray, np.ndarray:
     idf = np.log(len(clean_docs) / df) + 1
     tfidf = tf * idf
     query_vector = np.zeros((1, len(unique_words)))
-    for word in data_cleaning(query)[0].split():
+    for word in data_cleaning([query])[0].split():
         if word in word_to_idx:
             query_vector[0, word_to_idx[word]] += 1
-
     return tfidf, query_vector
 
 def cosine_similarity(vector_a, vector_b):
@@ -79,7 +79,8 @@ def cosine_similarity(vector_a, vector_b):
 
     magnitude_a = np.linalg.norm(vector_a)
     magnitude_b = np.linalg.norm(vector_b)
-
+    if magnitude_a == 0 or magnitude_b == 0:
+        return 0
     similarity = dot_product / (magnitude_a * magnitude_b)
 
     return similarity
@@ -88,7 +89,7 @@ def main():
     print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
     while True:
         question = input("Please enter a question: ").lower().replace("?", "")
-        search_object = "Trump"
+        search_object = "Donald_Trump"
 
         if question == "exit":
             print("Goodbye!")
