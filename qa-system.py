@@ -1,5 +1,6 @@
 import requests
 from pyquery import PyQuery as pq
+from typing import Tuple
 import logging
 import numpy as np
 import spacy
@@ -10,8 +11,16 @@ url = "https://en.wikipedia.org/wiki/"
 # For reformulate the question
 nlp = spacy.load("en_core_web_sm")
 
-def search_wiki(item) -> list[str]:
-    """Search for Wikipedia article and return the article"""
+def search_wiki(item: str) -> list[str]:
+    """
+    Search for Wikipedia article and return the article.
+
+    Args:
+        item: The item to search for
+
+    Returns:
+        list[str]: The article
+    """
     response = requests.get(url + item)
     doc = pq(response.text)
     items = doc("#mw-content-text > div > p")
@@ -21,7 +30,15 @@ def search_wiki(item) -> list[str]:
     return documents
 
 def data_cleaning(documents: list[str]) -> list[str]:
-    """Clean the data by removing punctuation, stop words and converting to lowercase"""
+    """
+    Clean the data by removing punctuation, stop words and converting to lowercase.
+
+    Args:
+        documents: List of documents to clean
+
+    Returns:
+        list[str]: List of cleaned documents
+    """
     cleaned_docs = []
     for doc in documents:
         doc = nlp(doc.lower())
@@ -29,7 +46,16 @@ def data_cleaning(documents: list[str]) -> list[str]:
         cleaned_docs.append(" ".join(filtered_tokens))
     return cleaned_docs
 
-def prep_question(question: str) -> str:
+def prep_question(question: str) -> Tuple[str, str]:
+    """
+    Preprocess the question by removing the question type and transform it to the query for answer and objects to search.
+
+    Args:
+        question: The question to preprocess
+
+    Returns:
+        Tuple[str, str]: The query and the object to search
+    """
     types = ["what", "where", "when", "who"]
 
     for t in types:
@@ -44,6 +70,17 @@ def prep_question(question: str) -> str:
                 return match.group(2) + " " + match.group(1), match.group(2)
 
 def tfidf(documents: list[str], query: str) -> np.ndarray:
+    """
+    Calculate the tfidf for the documents and the query.
+
+    Args:
+        documents: List of documents
+        query: The query
+
+    Returns:
+        np.ndarray: The tfidf matrix for the documents
+        np.ndarray: The tfidf vector for the query
+    """
     clean_docs = data_cleaning(documents)
     unique_words = {word for doc in clean_docs for word in doc.split()}
     word_to_idx = {word: idx for idx, word in enumerate(unique_words)}
@@ -60,7 +97,7 @@ def tfidf(documents: list[str], query: str) -> np.ndarray:
             query_vector[0, word_to_idx[word]] += 1
     return tfidf, query_vector
 
-def cosine_similarity(vector_a, vector_b):
+def cosine_similarity(vector_a: np.array, vector_b: np.array) -> float:
     """
     Calculate the cosine similarity between two vectors.
     Cosine similarity measures how similar two vectors are by calculating the cosine of the angle between them.
@@ -87,7 +124,16 @@ def cosine_similarity(vector_a, vector_b):
     return similarity
 
 def top_k_scores(similarity: list[float], k: int) -> list[int]:
-    """Return the top k scores"""
+    """
+    Return the top k scores.
+
+    Args:
+        similarity: List of similarity scores
+        k: The number of top scores to return
+
+    Returns:
+        list[int]: The indices of the top k scores
+    """
     flat_scores = np.array([s[0] if s != 0 else 0 for s in similarity])
     sorted_indices = np.argsort(flat_scores)[::-1]
     top_k_indices = sorted_indices[:k]
