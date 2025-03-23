@@ -4,6 +4,8 @@ from typing import Tuple
 import logging
 import numpy as np
 import spacy
+import nltk
+from nltk.util import ngrams
 import re
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
@@ -64,7 +66,6 @@ def prep_question(question: str) -> Tuple[str, str]:
         match = re.search(pattern, question)
         if match:
             doc = nlp(question)
-            breakpoint()
             if doc[-1].dep_ == "ROOT" and doc[-1].pos_ == "VERB":
                 pronoun = [token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]]
                 verb = [token.text for token in doc if token.pos_ == "VERB"]
@@ -142,6 +143,30 @@ def top_k_scores(similarity: list[float], k: int) -> list[int]:
     top_k_indices = sorted_indices[:k]
     return top_k_indices
 
+
+def generate_ngrams(text, n) -> list[str]:
+    clean_text = re.sub(r'\([^)]*\)', '', text).strip()
+    n_grams = ngrams(nltk.word_tokenize(clean_text.lower()), n)
+    return [ ' '.join(grams) for grams in n_grams]
+
+def n_grams_filter(documents: list[str], query: str) -> list[str]:
+    n = len(query.split())
+    ans = []
+    while n > 0:
+        for document in documents:
+            n_grams = generate_ngrams(document, n)
+            if query.lower() in n_grams:
+                for idx, token in enumerate(n_grams):
+                    if token == query.lower():
+                        ans.append(n_grams[idx+n])
+                        ans.append(n_grams[idx+2*n])
+                        # ans.append(n_grams[idx+3*n])
+                        return ans
+        n -= 1
+        query = " ".join(query.split()[-n:])
+    return ans
+
+
 def main():
     print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
     while True:
@@ -151,15 +176,21 @@ def main():
             print("Goodbye!")
             break
         query, search_object = prep_question(question)
-        logging.info(f"Query: {query}, Search Object: {search_object}")
+        logging.info(f"Answer format: {query}, Search Object: {search_object}")
         documents = search_wiki(search_object)
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
         documents_vector, query_vector = tfidf(documents, query)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
         top_k_indices = top_k_scores(similarity, k = 5)
-        print(f"\n Question: {question}")
-        for idx in top_k_indices:
-            print(f"Answer: {documents[idx]}")
+        logging.info(f"Select the Top 5 Articles: {top_k_indices}")
+        select_docs = [documents[idx] for idx in top_k_indices]
+        answer = n_grams_filter(select_docs, query)
+        result = []
+        for sen in answer:
+            for word in sen.split():
+                if word not in result:
+                    result.append(word)
+        print(query + " " + " ".join(result))
 
 
 if __name__ == "__main__":
