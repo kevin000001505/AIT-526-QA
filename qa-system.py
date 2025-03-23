@@ -29,7 +29,7 @@ def search_wiki(item: str) -> list[str]:
     items = doc("#mw-content-text > div > p")
     documents = []
     for item in items.items():
-        documents.append(item.text())
+        documents.append(re.sub(r"\[\d+\]", "", item.text()).strip())
     return documents
 
 def data_cleaning(documents: list[str]) -> list[str]:
@@ -73,7 +73,28 @@ def prep_question(question: str) -> Tuple[str, str]:
             else:
                 return match.group(2) + " " + match.group(1), match.group(2)
 
-def tfidf(documents: list[str], query: str) -> np.ndarray:
+def normalize_tfidf(tfidf_matrix):
+    """
+    Normalize each document vector (row) in the TF-IDF matrix using L2 norm.
+    
+    Parameters:
+    - tfidf_matrix (numpy.ndarray): 2D array of shape (n_documents, n_terms)
+    
+    Returns:
+    - numpy.ndarray: The normalized TF-IDF matrix
+    """
+    # Compute the L2 norm for each document (row)
+    # Keep dimensions so that broadcasting works during division
+    norms = np.linalg.norm(tfidf_matrix, axis=1, keepdims=True)
+    
+    # Avoid division by zero by replacing zero norms with 1
+    norms[norms == 0] = 1
+    
+    # Divide each element by its corresponding document norm
+    normalized_matrix = tfidf_matrix / norms
+    return normalized_matrix
+
+def tfidf(documents: list[str], query: str, normalization = False) -> np.ndarray:
     """
     Calculate the tfidf for the documents and the query.
 
@@ -99,6 +120,8 @@ def tfidf(documents: list[str], query: str) -> np.ndarray:
     for word in data_cleaning([query])[0].split():
         if word in word_to_idx:
             query_vector[0, word_to_idx[word]] += 1
+    if normalization:
+        tfidf = normalize_tfidf(tfidf)
     return tfidf, query_vector
 
 def cosine_similarity(vector_a: np.array, vector_b: np.array) -> float:
@@ -149,22 +172,42 @@ def generate_ngrams(text, n) -> list[str]:
     n_grams = ngrams(nltk.word_tokenize(clean_text.lower()), n)
     return [ ' '.join(grams) for grams in n_grams]
 
+def extract_answer_from_ngrams(n_grams: list[str], idx: int, n: int) -> list[str]:
+    """Extract answer text from matching n-grams"""
+    ans = []
+    k = 1
+    while idx + k*n < len(n_grams) and "." not in n_grams[idx+k*n]:
+        ans.append(n_grams[idx+k*n])
+        k += 1
+    
+    if idx + k*n < len(n_grams):
+        ans.append(re.findall(r"(.*?)\.", n_grams[idx+k*n])[0]+".")
+    
+    return ans
+
+def find_match_in_document(document: str, query: str, n: int) -> list[str]:
+    """Find matching n-grams in a document and extract the answer"""
+    n_grams = generate_ngrams(document, n)
+    if query.lower() in n_grams:
+        for idx, token in enumerate(n_grams):
+            if token == query.lower():
+                return extract_answer_from_ngrams(n_grams, idx, n)
+    return []
+
 def n_grams_filter(documents: list[str], query: str) -> list[str]:
     n = len(query.split())
-    ans = []
+    current_query = query
+    
     while n > 0:
         for document in documents:
-            n_grams = generate_ngrams(document, n)
-            if query.lower() in n_grams:
-                for idx, token in enumerate(n_grams):
-                    if token == query.lower():
-                        ans.append(n_grams[idx+n])
-                        ans.append(n_grams[idx+2*n])
-                        # ans.append(n_grams[idx+3*n])
-                        return ans
+            result = find_match_in_document(document, current_query, n)
+            if result:
+                return result
+                
         n -= 1
-        query = " ".join(query.split()[-n:])
-    return ans
+        current_query = " ".join(query.split()[-n:])
+    
+    return []
 
 
 def main():
@@ -179,12 +222,12 @@ def main():
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
         documents = search_wiki(search_object)
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
-        documents_vector, query_vector = tfidf(documents, query)
+        documents_vector, query_vector = tfidf(documents, query, normalization=False)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
         top_k_indices = top_k_scores(similarity, k = 5)
-        logging.info(f"Select the Top 5 Articles: {top_k_indices}")
         select_docs = [documents[idx] for idx in top_k_indices]
         answer = n_grams_filter(select_docs, query)
+        logging.info(f"Answer: {answer}")
         result = []
         for sen in answer:
             for word in sen.split():
