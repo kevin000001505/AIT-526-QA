@@ -6,6 +6,7 @@ import numpy as np
 import spacy
 import re
 
+logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 
 url = "https://en.wikipedia.org/wiki/"
 # For reformulate the question
@@ -62,10 +63,12 @@ def prep_question(question: str) -> Tuple[str, str]:
         pattern = fr"(?i){t}\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
         if match:
+            doc = nlp(question)
             breakpoint()
-            doc = nlp(match.group(2))
             if doc[-1].dep_ == "ROOT" and doc[-1].pos_ == "VERB":
-                return doc[:-1].text + " " + match.group(1) + " " + doc[-1].text, match.group(2)
+                pronoun = [token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]]
+                verb = [token.text for token in doc if token.pos_ == "VERB"]
+                return f"{pronoun[0]} {match.group(1)} {verb[0]}", match.group(2)
             else:
                 return match.group(2) + " " + match.group(1), match.group(2)
 
@@ -142,17 +145,19 @@ def top_k_scores(similarity: list[float], k: int) -> list[int]:
 def main():
     print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
     while True:
-        question = input("Please enter a question: ").lower().replace("?", "")
+        question = input("Please enter a question: ").replace("?", "")
 
         if question == "exit":
             print("Goodbye!")
             break
         query, search_object = prep_question(question)
+        logging.info(f"Query: {query}, Search Object: {search_object}")
         documents = search_wiki(search_object)
+        logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
         documents_vector, query_vector = tfidf(documents, query)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
         top_k_indices = top_k_scores(similarity, k = 5)
-        print(f"Question: {question}")
+        print(f"\n Question: {question}")
         for idx in top_k_indices:
             print(f"Answer: {documents[idx]}")
 
