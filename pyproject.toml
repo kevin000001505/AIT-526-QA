@@ -9,9 +9,9 @@ readme = "README.md"
 python = ">=3.10,<3.13"
 nltk = "^3.9.1"
 spacy = "^3.8.4"
-pyquery = "^2.0.1"
 requests = "^2.32.3"
 numpy = "^2.2.4"
+wikipedia = "^1.4.0"
 
 
 [build-system]

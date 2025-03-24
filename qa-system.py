@@ -1,5 +1,4 @@
-import requests
-from pyquery import PyQuery as pq
+import wikipedia
 from typing import Tuple
 import logging
 import numpy as np
@@ -10,7 +9,6 @@ import re
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 
-url = "https://en.wikipedia.org/wiki/"
 # For reformulate the question
 nlp = spacy.load("en_core_web_sm")
 
@@ -24,12 +22,14 @@ def search_wiki(item: str) -> list[str]:
     Returns:
         list[str]: The article
     """
-    response = requests.get(url + item)
-    doc = pq(response.text)
-    items = doc("#mw-content-text > div > p")
+    results = wikipedia.search(item)
     documents = []
-    for item in items.items():
-        documents.append(re.sub(r"\[\d+\]", "", item.text()).strip())
+    for result in results:
+        try:
+            documents.append(wikipedia.summary(result))
+        except Exception as e:
+            logging.error(f"It wikipedia not our fault: \nError: {e}")
+            continue
     return documents
 
 def data_cleaning(documents: list[str]) -> list[str]:
@@ -222,7 +222,7 @@ def main():
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
         documents = search_wiki(search_object)
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
-        documents_vector, query_vector = tfidf(documents, query, normalization=False)
+        documents_vector, query_vector = tfidf(documents, query, normalization=True)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
         top_k_indices = top_k_scores(similarity, k = 5)
         select_docs = [documents[idx] for idx in top_k_indices]
