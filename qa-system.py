@@ -116,10 +116,11 @@ def tfidf(documents: list[str], query: str, normalization = False) -> np.ndarray
     df = (tf != 0).sum(axis=0)
     idf = np.log(len(clean_docs) / df) + 1
     tfidf = tf * idf
-    query_vector = np.zeros((1, len(unique_words)))
+    query_tf = np.zeros((1, len(unique_words)))
     for word in data_cleaning([query])[0].split():
         if word in word_to_idx:
-            query_vector[0, word_to_idx[word]] += 1
+            query_tf[0, word_to_idx[word]] += 1
+    query_vector = query_tf * idf
     if normalization:
         tfidf = normalize_tfidf(tfidf)
     return tfidf, query_vector
@@ -172,42 +173,33 @@ def generate_ngrams(text, n) -> list[str]:
     n_grams = ngrams(nltk.word_tokenize(clean_text.lower()), n)
     return [ ' '.join(grams) for grams in n_grams]
 
-def extract_answer_from_ngrams(n_grams: list[str], idx: int, n: int) -> list[str]:
-    """Extract answer text from matching n-grams"""
-    ans = []
-    k = 1
-    while idx + k*n < len(n_grams) and "." not in n_grams[idx+k*n]:
-        ans.append(n_grams[idx+k*n])
-        k += 1
-    
-    if idx + k*n < len(n_grams):
-        ans.append(re.findall(r"(.*?)\.", n_grams[idx+k*n])[0]+".")
-    
-    return ans
-
-def find_match_in_document(document: str, query: str, n: int) -> list[str]:
-    """Find matching n-grams in a document and extract the answer"""
-    n_grams = generate_ngrams(document, n)
-    if query.lower() in n_grams:
-        for idx, token in enumerate(n_grams):
-            if token == query.lower():
-                return extract_answer_from_ngrams(n_grams, idx, n)
-    return []
-
 def n_grams_filter(documents: list[str], query: str) -> list[str]:
     n = len(query.split())
-    current_query = query
-    
+    ans = []
     while n > 0:
         for document in documents:
-            result = find_match_in_document(document, current_query, n)
-            if result:
-                return result
-                
+            n_grams = generate_ngrams(document, n)
+
+            if query.lower() in n_grams:
+                for idx, token in enumerate(n_grams):
+
+                    if token == query.lower():
+                        k = 1
+
+                        while "." not in n_grams[idx+k*n]:
+                            ans.append(n_grams[idx+k*n])
+                            k += 1
+
+                        match = re.search(r'[^.]+(?=\.)', n_grams[idx+k*n])
+                        if match:
+                            ans.append(match.group(0))
+                        ans.append(".")
+
+                        return ans
         n -= 1
-        current_query = " ".join(query.split()[-n:])
-    
-    return []
+        query = " ".join(query.split()[-n:])
+
+    return ans
 
 
 def main():
