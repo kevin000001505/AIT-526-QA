@@ -22,13 +22,13 @@ def search_wiki(item: str) -> list[str]:
     Returns:
         list[str]: The article
     """
-    results = wikipedia.search(item)
+    results = wikipedia.search(item, results = 3)
     documents = []
     for result in results:
         try:
             documents.append(wikipedia.summary(result))
         except Exception as e:
-            logging.error(f"It wikipedia not our fault: \nError: {e}")
+            # logging.error(f"It wikipedia not our fault: \nError: {e}")
             continue
     return documents
 
@@ -59,19 +59,36 @@ def prep_question(question: str) -> Tuple[str, str]:
     Returns:
         Tuple[str, str]: The query and the object to search
     """
-    types = ["what", "where", "when", "who"]
 
-    for t in types:
-        pattern = fr"(?i){t}\s+(is|was|are|were)\s+(.*)"
+    doc = nlp(question)
+    if doc[-1].pos_ == "VERB":
+        pronoun = [token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]]
+        verb = [token.text for token in doc if token.pos_ == "VERB"]
+        return f"{pronoun[0]} is {verb[0]} in", pronoun[0]
+
+    elif question.lower().startswith("who"):
+        pattern = r"(?i)who\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        if match:
-            doc = nlp(question)
-            if doc[-1].dep_ == "ROOT" and doc[-1].pos_ == "VERB":
-                pronoun = [token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]]
-                verb = [token.text for token in doc if token.pos_ == "VERB"]
-                return f"{pronoun[0]} {match.group(1)} {verb[0]}", match.group(2)
-            else:
-                return match.group(2) + " " + match.group(1), match.group(2)
+        return match.group(2) + " " + match.group(1), match.group(2)
+
+    elif question.lower().startswith("what"):
+        pattern = r"(?i)what\s+(is|was|are|were)\s+(.*)"
+        match = re.search(pattern, question)
+        return match.group(2) + " " + match.group(1), match.group(2)
+
+    elif question.lower().startswith("where"):
+        pattern = r"(?i)where\s+(is|was|are|were)\s+(.*)"
+        match = re.search(pattern, question)
+        return match.group(2) + " " + match.group(1) + " located in", match.group(2)
+
+    elif question.lower().startswith("when"):
+        pattern = r"(?i)when\s+(is|was|are|were)\s+(.*)"
+        match = re.search(pattern, question)
+        return match.group(2) + " " + match.group(1) + " happen in", match.group(2)
+
+    else:
+        print("Invalid Question")
+        return None, None
 
 def normalize_tfidf(tfidf_matrix):
     """
@@ -83,14 +100,10 @@ def normalize_tfidf(tfidf_matrix):
     Returns:
     - numpy.ndarray: The normalized TF-IDF matrix
     """
-    # Compute the L2 norm for each document (row)
-    # Keep dimensions so that broadcasting works during division
     norms = np.linalg.norm(tfidf_matrix, axis=1, keepdims=True)
     
-    # Avoid division by zero by replacing zero norms with 1
     norms[norms == 0] = 1
     
-    # Divide each element by its corresponding document norm
     normalized_matrix = tfidf_matrix / norms
     return normalized_matrix
 
@@ -190,7 +203,7 @@ def n_grams_filter(documents: list[str], query: str) -> list[str]:
                             ans.append(n_grams[idx+k*n])
                             k += 1
 
-                        match = re.search(r'[^.]+(?=\.)', n_grams[idx+k*n])
+                        match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[idx+k*n])
                         if match:
                             ans.append(match.group(0))
                         ans.append(".")
