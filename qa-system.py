@@ -5,14 +5,21 @@ import numpy as np
 import spacy
 import nltk
 from nltk.util import ngrams
+import os
 import re
 
+# Silence the GuessedAtParserWarning
+import warnings
+from bs4 import GuessedAtParserWarning
+warnings.filterwarnings("ignore", category=GuessedAtParserWarning)
+
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
+wikipedia.set_lang("en")
 
 # For reformulate the question
 nlp = spacy.load("en_core_web_sm")
 
-def search_wiki(item: str) -> list[str]:
+def search_wiki(search_object: str) -> list[str]:
     """
     Search for Wikipedia article and return the article.
 
@@ -22,12 +29,17 @@ def search_wiki(item: str) -> list[str]:
     Returns:
         list[str]: The article
     """
-    results = wikipedia.search(item, results = 3)
     documents = []
+    try:
+        results = wikipedia.search(search_object, results = 3)
+    except Exception:
+        # logging.error(f"Error: {e}")
+        return documents
+    logging.info(f"Successfully Search the Number of item: {results}")
     for result in results:
         try:
             documents.append(wikipedia.summary(result))
-        except Exception as e:
+        except Exception:
             # logging.error(f"It wikipedia not our fault: \nError: {e}")
             continue
     return documents
@@ -59,12 +71,13 @@ def prep_question(question: str) -> Tuple[str, str]:
     Returns:
         Tuple[str, str]: The query and the object to search
     """
-
     doc = nlp(question)
     if doc[-1].pos_ == "VERB":
-        pronoun = [token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]]
+        pattern = r"\b(is|are|was|were)\b"
+        match = re.search(pattern, question)
+        pronoun = " ".join([token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]])
         verb = [token.text for token in doc if token.pos_ == "VERB"]
-        return f"{pronoun[0]} is {verb[0]} in", pronoun[0]
+        return f"{pronoun} {match.group(0)} {verb[0]} in", pronoun
 
     elif question.lower().startswith("who"):
         pattern = r"(?i)who\s+(is|was|are|were)\s+(.*)"
@@ -198,12 +211,15 @@ def n_grams_filter(documents: list[str], query: str) -> list[str]:
 
                     if token == query.lower():
                         k = 1
-
-                        while "." not in n_grams[idx+k*n]:
+                        while idx+k*n < len(n_grams) and "." not in n_grams[idx+k*n]:
                             ans.append(n_grams[idx+k*n])
                             k += 1
 
-                        match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[idx+k*n])
+                        if idx+k*n < len(n_grams):
+                            match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[idx+k*n])
+                        else:
+                            match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[-1])
+
                         if match:
                             ans.append(match.group(0))
                         ans.append(".")
@@ -216,16 +232,37 @@ def n_grams_filter(documents: list[str], query: str) -> list[str]:
 
 
 def main():
+    LOG_FILE = "qa_log.txt"
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "w") as f:
+            f.write("QA System Log File\nThis is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.\n")
+    
     print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
+
     while True:
         question = input("Please enter a question: ").replace("?", "")
-
+        with open(LOG_FILE, "a") as file:
+            file.write(f"Question: {question}\n")
         if question == "exit":
             print("Goodbye!")
+            with open(LOG_FILE, "a") as file:
+                file.write("Response: Goodbye!\n")
             break
+
         query, search_object = prep_question(question)
+        with open(LOG_FILE, "a") as file:
+            file.write(f"Search_Object: {search_object}\n")
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
+
         documents = search_wiki(search_object)
+        with open(LOG_FILE, "a") as file:
+            file.write(f"Documents: {documents}\n")
+
+        if len(documents) == 0:
+            print("I am sorry, I don't know the answer.")
+            with open(LOG_FILE, "a") as file:
+                file.write("Response: I am sorry, I don't know the answer.\n")
+            continue
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
         documents_vector, query_vector = tfidf(documents, query, normalization=True)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
@@ -238,7 +275,14 @@ def main():
             for word in sen.split():
                 if word not in result:
                     result.append(word)
-        print(query + " " + " ".join(result))
+        if len(result) > 0:
+            with open(LOG_FILE, "a") as file:
+                file.write(f"Response: {query} {' '.join(result)}\n")
+            print(query + " " + " ".join(result))
+        else:
+            with open(LOG_FILE, "a") as file:
+                file.write("Response: I am sorry, I don't know the answer.\n")
+            print("I am sorry, I don't know the answer.")
 
 
 if __name__ == "__main__":
