@@ -31,7 +31,7 @@ def search_wiki(search_object: str) -> list[str]:
     """
     documents = []
     try:
-        results = wikipedia.search(search_object, results = 3)
+        results = wikipedia.search(search_object, results = 5)
     except Exception:
         # logging.error(f"Error: {e}")
         return documents
@@ -56,7 +56,7 @@ def data_cleaning(documents: list[str]) -> list[str]:
     """
     cleaned_docs = []
     for doc in documents:
-        doc = nlp(doc.lower())
+        doc = nlp(doc)
         filtered_tokens = [token.text for token in doc if not token.is_stop and not token.is_punct]
         cleaned_docs.append(" ".join(filtered_tokens))
     return cleaned_docs
@@ -237,7 +237,7 @@ def main():
         with open(LOG_FILE, "w") as f:
             f.write("QA System Log File\nThis is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.\n")
     
-    print("This is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
+    print("This is a QA system by Your Name. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
 
     while True:
         question = input("Please enter a question: ").replace("?", "")
@@ -266,7 +266,7 @@ def main():
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
         documents_vector, query_vector = tfidf(documents, query, normalization=True)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
-        top_k_indices = top_k_scores(similarity, k = 5)
+        top_k_indices = top_k_scores(similarity, k = 3)
         select_docs = [documents[idx] for idx in top_k_indices]
         answer = n_grams_filter(select_docs, query)
         logging.info(f"Answer: {answer}")
@@ -278,7 +278,7 @@ def main():
         if len(result) > 0:
             with open(LOG_FILE, "a") as file:
                 file.write(f"Response: {query} {' '.join(result)}\n")
-            print(query + " " + " ".join(result))
+            print(f"{query[0].upper()}{query[1:]} {' '.join(result)}")
         else:
             with open(LOG_FILE, "a") as file:
                 file.write("Response: I am sorry, I don't know the answer.\n")
