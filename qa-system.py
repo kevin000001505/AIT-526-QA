@@ -18,6 +18,7 @@ wikipedia.set_lang("en")
 
 # For reformulate the question
 nlp = spacy.load("en_core_web_sm")
+LOG_FILE = "qa_log.txt"
 
 def search_wiki(search_object: str) -> list[str]:
     """
@@ -230,9 +231,11 @@ def n_grams_filter(documents: list[str], query: str) -> list[str]:
 
     return ans
 
+def log_write(message: str):
+    with open(LOG_FILE, "a") as file:
+        file.write(message + "\n")
 
 def main():
-    LOG_FILE = "qa_log.txt"
     if not os.path.exists(LOG_FILE):
         with open(LOG_FILE, "w") as f:
             f.write("QA System Log File\nThis is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.\n")
@@ -241,8 +244,7 @@ def main():
 
     while True:
         question = input("Please enter a question: ").replace("?", "")
-        with open(LOG_FILE, "a") as file:
-            file.write(f"Question: {question}\n")
+        log_write(f"Question: {question}")
         if question == "exit":
             print("Goodbye!")
             with open(LOG_FILE, "a") as file:
@@ -250,18 +252,15 @@ def main():
             break
 
         query, search_object = prep_question(question)
-        with open(LOG_FILE, "a") as file:
-            file.write(f"Search_Object: {search_object}\n")
+        log_write(f"Search_Object: {search_object}")
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
 
         documents = search_wiki(search_object)
-        with open(LOG_FILE, "a") as file:
-            file.write(f"Documents: {documents}\n")
+        log_write(f"Documents: {documents}")
 
         if len(documents) == 0:
             print("I am sorry, I don't know the answer.")
-            with open(LOG_FILE, "a") as file:
-                file.write("Response: I am sorry, I don't know the answer.\n")
+            log_write("Response: I am sorry, I don't know the answer.")
             continue
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
         documents_vector, query_vector = tfidf(documents, query, normalization=True)
@@ -276,12 +275,10 @@ def main():
                 if word not in result:
                     result.append(word)
         if len(result) > 0:
-            with open(LOG_FILE, "a") as file:
-                file.write(f"Response: {query} {' '.join(result)}\n")
+            log_write(f"Response: {query} {' '.join(result)}")
             print(f"{query[0].upper()}{query[1:]} {' '.join(result)}")
         else:
-            with open(LOG_FILE, "a") as file:
-                file.write("Response: I am sorry, I don't know the answer.\n")
+            log_write("Response: I am sorry, I don't know the answer.")
             print("I am sorry, I don't know the answer.")
 
 
