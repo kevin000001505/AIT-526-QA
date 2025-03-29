@@ -61,7 +61,7 @@ def data_cleaning(documents: list[str]) -> list[str]:
         cleaned_docs.append(" ".join(filtered_tokens))
     return cleaned_docs
 
-def prep_question(question: str) -> Tuple[str, str, int]:
+def prep_question(question: str) -> Tuple[str, str]:
     """
     Preprocess the question by removing the question type and transform it to the query for answer and objects to search.
 
@@ -69,7 +69,7 @@ def prep_question(question: str) -> Tuple[str, str, int]:
         question: The question to preprocess
 
     Returns:
-        Tuple[str, str, int]: The query, the object to search, and the question type
+        Tuple[str, str]: The query and the object to search
     """
     doc = nlp(question)
     if doc[-1].pos_ == "VERB":
@@ -77,31 +77,31 @@ def prep_question(question: str) -> Tuple[str, str, int]:
         match = re.search(pattern, question)
         pronoun = " ".join([token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]])
         verb = [token.text for token in doc if token.pos_ == "VERB"]
-        return f"{pronoun} {match.group(0)} {verb[0]} in", pronoun, 0
+        return f"{pronoun} {match.group(0)} {verb[0]} in", pronoun
 
     elif question.lower().startswith("who"):
         pattern = r"(?i)who\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1), match.group(2), 1
+        return match.group(2) + " " + match.group(1), match.group(2)
 
     elif question.lower().startswith("what"):
         pattern = r"(?i)what\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1), match.group(2), 2
+        return match.group(2) + " " + match.group(1), match.group(2)
 
     elif question.lower().startswith("where"):
         pattern = r"(?i)where\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1) + " located in", match.group(2), 3
+        return match.group(2) + " " + match.group(1) + " located in", match.group(2)
 
     elif question.lower().startswith("when"):
         pattern = r"(?i)when\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1) + " happen in", match.group(2), 4
+        return match.group(2) + " " + match.group(1) + " happen in", match.group(2)
 
     else:
         print("Invalid Question")
-        return None, None, None
+        return None, None
 
 def normalize_tfidf(tfidf_matrix):
     """
@@ -132,14 +132,15 @@ def tfidf(documents: list[str], query: str, normalization = False) -> np.ndarray
         np.ndarray: The tfidf matrix for the documents
         np.ndarray: The tfidf vector for the query
     """
-    unique_words = {word for doc in documents for word in doc.split()}
+    clean_docs = data_cleaning(documents)
+    unique_words = {word for doc in clean_docs for word in doc.split()}
     word_to_idx = {word: idx for idx, word in enumerate(unique_words)}
-    tf = np.zeros((len(documents), len(unique_words)))
-    for idx, doc in enumerate(documents):
+    tf = np.zeros((len(clean_docs), len(unique_words)))
+    for idx, doc in enumerate(clean_docs):
         for word in doc.split():
             tf[idx, word_to_idx[word]] += 1
     df = (tf != 0).sum(axis=0)
-    idf = np.log(len(documents) / df) + 1
+    idf = np.log(len(clean_docs) / df) + 1
     tfidf = tf * idf
     query_tf = np.zeros((1, len(unique_words)))
     for word in data_cleaning([query])[0].split():
@@ -192,111 +193,43 @@ def top_k_scores(similarity: list[float], k: int) -> list[int]:
     top_k_indices = sorted_indices[:k]
     return top_k_indices
 
+
 def generate_ngrams(text, n) -> list[str]:
-    n_grams = ngrams(nltk.word_tokenize(text.lower()), n)
-    return [' '.join(grams) for grams in n_grams]
+    clean_text = re.sub(r'\([^)]*\)', '', text).strip()
+    n_grams = ngrams(nltk.word_tokenize(clean_text.lower()), n)
+    return [ ' '.join(grams) for grams in n_grams]
 
-def tile_ngrams(ngram1: list[str], ngram2: list[str]) -> list[str]:
-    # Handle containment cases
-    if all(x in ngram2 for x in ngram1):
-        return ngram2
-    if all(x in ngram1 for x in ngram2):
-        return ngram1
-
-    # Check both tiling directions
-    def get_tiled(n1, n2):
-        for i in range(1, min(len(n1), len(n2)) + 1):
-            if n1[-i:] == n2[:i]:
-                return n1 + n2[i:]
-        return None
-
-    # Try both tiling orders
-    tiled1 = get_tiled(ngram1, ngram2)
-    tiled2 = get_tiled(ngram2, ngram1)
-
-    # Return the first valid tiling, or None if neither works
-    return tiled1 or tiled2
-
-def n_grams_filter(documents: list[str], question_type: int) -> list[str]:
-    ngrams = [] # List of ngrams
-    scores = [] # List of ngram scores
-
-    # Generate all unigrams, bigrams and trigrams and count frequency in documents
-    for n in range(1, 4):
+def n_grams_filter(documents: list[str], query: str) -> list[str]:
+    n = len(query.split())
+    ans = []
+    while n > 0:
         for document in documents:
             n_grams = generate_ngrams(document, n)
 
-            # Find all distinct ngrams from the search document
-            distinct_ngrams = []
-            for n_gram in n_grams:
-                if n_gram not in distinct_ngrams:
-                    distinct_ngrams.append(n_gram)
-            
-            # Add all distinct ngrams scores to the result, increasing score by only 1 per document
-            # Scores are also adjusted by positional bias, meaning ngrams appearing earlier in
-            # the document are scored higher. Also score longer ngrams higher
-            max_score = len(distinct_ngrams)
-            for idx, n_gram in enumerate(distinct_ngrams):
-                score = (max_score - idx) / max_score * n
-                if n_gram not in ngrams:
-                    ngrams.append(n_gram)
-                    scores.append(score)
-                else:
-                    scores[ngrams.index(n_gram)] += score
+            if query.lower() in n_grams:
+                for idx, token in enumerate(n_grams):
 
-    # Re-score ngrams based on question type
-    question_bias = 1.5
-    """
-    Question types:
-    - 1: WHO
-    - 2: WHAT
-    - 3: WHERE
-    - 4: WHEN
-    """
-    for idx, ngram in enumerate(ngrams):
-        token = nlp(ngram)
-        for ent in token.ents:
-            if question_type == 1:
-                if ent.label_ in ['PERSON', 'ORG']:
-                    scores[idx] *= question_bias
-                    logging.info(f"{ent.text} {ent.label_}")
-            elif question_type == 2:
-                if ent.label_ in ['NORP', 'FAC', 'ORG', 'GPE', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LAW', 'LANGUAGE']:
-                    scores[idx] *= question_bias
-            elif question_type == 3:
-                if ent.label_ in ['LOC']:
-                    scores[idx] *= question_bias
-            elif question_type == 4:
-                if ent.label_ in ['DATE', 'TIME', 'QUANTITY', 'CARDINAL']:
-                    scores[idx] *= question_bias
+                    if token == query.lower():
+                        k = 1
+                        while idx+k*n < len(n_grams) and "." not in n_grams[idx+k*n]:
+                            ans.append(n_grams[idx+k*n])
+                            k += 1
 
-    # Tile ngrams until it's not possible anymore
-    ngrams = [ngram.split() for ngram in ngrams]
-    
-    # Function to remove tiled ngrams from both lists
-    def remove_ngram(ngram):
-        scores.remove(scores[ngrams.index(ngram)])
-        ngrams.remove(ngram)
+                        if idx+k*n < len(n_grams):
+                            match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[idx+k*n])
+                        else:
+                            match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[-1])
 
-    ans_score = max(scores) # Find the ngram with the highest score as a starting point
-    ans = ngrams[scores.index(ans_score)]
-    sep = " "
-    logging.info(f"Starting with ngram \"{sep.join(ans)}\" with score {ans_score}")
-    remove_ngram(ans)
-    tile = True
-    while tile:
-        tile = False
-        max_score = max(scores) # Find the ngram with the highest score as a starting point
-        max_ngram = ngrams[scores.index(max_score)]
-        tile_result = tile_ngrams(max_ngram, ans)
-        if tile_result:
-            logging.info(f"Tiled \"{sep.join(max_ngram)}\" to \"{sep.join(ans)}\" to form\n\"{sep.join(tile_result)}\"")
-            tile = True
-            ans = tile_result
-            ans_score += max_score
-        remove_ngram(max_ngram)
+                        if match:
+                            ans.append(match.group(0))
+                        ans.append(".")
+
+                        return ans
+        n -= 1
+        query = " ".join(query.split()[-n:])
 
     return ans
+
 
 def main():
     LOG_FILE = "qa_log.txt"
@@ -304,7 +237,7 @@ def main():
         with open(LOG_FILE, "w") as f:
             f.write("QA System Log File\nThis is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.\n")
     
-    print("This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program.")
+    print("This is a QA system by Your Name. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
 
     while True:
         question = input("Please enter a question: ").replace("?", "")
@@ -316,14 +249,12 @@ def main():
                 file.write("Response: Goodbye!\n")
             break
 
-        query, search_object, type = prep_question(question)
-        query = query.lower()
-
+        query, search_object = prep_question(question)
         with open(LOG_FILE, "a") as file:
             file.write(f"Search_Object: {search_object}\n")
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
 
-        documents = data_cleaning(search_wiki(search_object))
+        documents = search_wiki(search_object)
         with open(LOG_FILE, "a") as file:
             file.write(f"Documents: {documents}\n")
 
@@ -337,7 +268,7 @@ def main():
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
         top_k_indices = top_k_scores(similarity, k = 3)
         select_docs = [documents[idx] for idx in top_k_indices]
-        answer = n_grams_filter(select_docs, type)
+        answer = n_grams_filter(select_docs, query)
         logging.info(f"Answer: {answer}")
         result = []
         for sen in answer:

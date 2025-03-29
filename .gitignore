@@ -2,6 +2,3 @@
 *pdf
 *.txt
 .DS_Store
-.env
-.gitignore
-test.py
