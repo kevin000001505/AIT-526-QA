@@ -77,7 +77,15 @@ def prep_question(question: str) -> Tuple[str, str, int]:
         match = re.search(pattern, question)
         pronoun = " ".join([token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]])
         verb = [token.text for token in doc if token.pos_ == "VERB"]
-        return f"{pronoun} {match.group(0)} {verb[0]} in", pronoun, 0
+        if question.lower().startswith("who"):
+            _ = 1
+        elif question.lower().startswith("what"):
+            _ = 2
+        elif question.lower().startswith("where"):
+            _ = 3
+        elif question.lower().startswith("when"):
+            _ = 4
+        return f"{pronoun} {match.group(0)} {verb[0]} in", pronoun, _
 
     elif question.lower().startswith("who"):
         pattern = r"(?i)who\s+(is|was|are|were)\s+(.*)"
@@ -264,12 +272,11 @@ def n_grams_filter(documents: list[str], question_type: int) -> list[str]:
                 if ent.label_ in ['NORP', 'FAC', 'ORG', 'GPE', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LAW', 'LANGUAGE']:
                     scores[idx] *= question_bias
             elif question_type == 3:
-                if ent.label_ in ['LOC']:
+                if ent.label_ in ['LOC', 'GPE']:
                     scores[idx] *= question_bias
             elif question_type == 4:
-                if ent.label_ in ['DATE', 'TIME', 'QUANTITY', 'CARDINAL']:
+                if ent.label_ in ['DATE', 'TIME', 'CARDINAL']:
                     scores[idx] *= question_bias
-
     # Tile ngrams until it's not possible anymore
     ngrams = [ngram.split() for ngram in ngrams]
     
@@ -298,39 +305,44 @@ def n_grams_filter(documents: list[str], question_type: int) -> list[str]:
 
     return ans
 
+def log_write(file, text, way = "a"):
+    """
+    Write to the log file.
+
+    Args:
+        file: The file to write to
+        text: The text to write
+    """
+    with open(file, way) as f:
+        f.write(text)
+
 def main():
     LOG_FILE = "qa_log.txt"
     if not os.path.exists(LOG_FILE):
-        with open(LOG_FILE, "w") as f:
-            f.write("QA System Log File\nThis is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.\n")
+        log_write(LOG_FILE, "This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program.\n", way = "w")
     
     print("This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program.")
 
     while True:
         question = input("Please enter a question: ").replace("?", "")
-        with open(LOG_FILE, "a") as file:
-            file.write(f"Question: {question}\n")
+        log_write(LOG_FILE, f"Question: {question}\n")
         if question == "exit":
             print("Goodbye!")
-            with open(LOG_FILE, "a") as file:
-                file.write("Response: Goodbye!\n")
+            log_write(LOG_FILE, "Response: Goodbye!\n")
             break
 
         query, search_object, type = prep_question(question)
         query = query.lower()
 
-        with open(LOG_FILE, "a") as file:
-            file.write(f"Search_Object: {search_object}\n")
+        log_write(LOG_FILE, f"Search_Object: {search_object}\n")
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
 
         documents = data_cleaning(search_wiki(search_object))
-        with open(LOG_FILE, "a") as file:
-            file.write(f"Documents: {documents}\n")
+        log_write(LOG_FILE, f"Documents: {documents}\n")
 
         if len(documents) == 0:
             print("I am sorry, I don't know the answer.")
-            with open(LOG_FILE, "a") as file:
-                file.write("Response: I am sorry, I don't know the answer.\n")
+            log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n")
             continue
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
         documents_vector, query_vector = tfidf(documents, query, normalization=True)
@@ -345,12 +357,10 @@ def main():
                 if word not in result:
                     result.append(word)
         if len(result) > 0:
-            with open(LOG_FILE, "a") as file:
-                file.write(f"Response: {query} {' '.join(result)}\n")
+            log_write(LOG_FILE, f"Response: {query} {' '.join(result)}\n")
             print(f"{query[0].upper()}{query[1:]} {' '.join(result)}")
         else:
-            with open(LOG_FILE, "a") as file:
-                file.write("Response: I am sorry, I don't know the answer.\n")
+            log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n")
             print("I am sorry, I don't know the answer.")
 
 
