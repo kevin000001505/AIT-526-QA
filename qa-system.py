@@ -31,16 +31,23 @@ def search_wiki(search_object: str) -> list[str]:
     """
     documents = []
     try:
-        results = wikipedia.search(search_object, results = 5)
+        results = wikipedia.search(search_object, results = 1)
     except Exception:
         # logging.error(f"Error: {e}")
         return documents
-    logging.info(f"Successfully Search the Number of item: {results}")
+    # logging.info(f"Successfully Search the Number of item: {results}")
     for result in results:
         try:
+            raw_content = wikipedia.page(result).content.split("\n")
+            for content in raw_content:
+                if len(content) > 20:
+                    documents.append(content)
             documents.append(wikipedia.summary(result))
+        except wikipedia.PageError as e:
+            print(f"\nPageError: {e}")
+            print("\nChange another search object.")
+            continue
         except Exception:
-            # logging.error(f"It wikipedia not our fault: \nError: {e}")
             continue
     return documents
 
@@ -85,7 +92,7 @@ def prep_question(question: str) -> Tuple[str, str, int]:
             _ = 3
         elif question.lower().startswith("when"):
             _ = 4
-        return f"{pronoun} {match.group(0)} {verb[0]} in", pronoun, _
+        return f"{pronoun} {match.group(0)} {verb[0]}", pronoun, _
 
     elif question.lower().startswith("who"):
         pattern = r"(?i)who\s+(is|was|are|were)\s+(.*)"
@@ -201,59 +208,78 @@ def top_k_scores(similarity: list[float], k: int) -> list[int]:
     return top_k_indices
 
 def generate_ngrams(text, n) -> list[str]:
-    n_grams = ngrams(nltk.word_tokenize(text.lower()), n)
+    n_grams = ngrams(nltk.word_tokenize(text), n)
     return [' '.join(grams) for grams in n_grams]
 
 def tile_ngrams(ngram1: list[str], ngram2: list[str]) -> list[str]:
+    """
+    Tile two lists of strings together if they have an overlapping portion.
+    
+    Args:
+        ngram1: First list of strings
+        ngram2: Second list of strings
+        
+    Returns:
+        list[str]: Combined list if tiling is possible, None otherwise
+        
+    Examples:
+        ['A', 'B', 'C'], ['B', 'C', 'D'] -> ['A', 'B', 'C', 'D']
+        ['love', 'you'], ['I', 'will', 'always', 'love'] -> ['I', 'will', 'always', 'love', 'you']
+    """
     # Handle containment cases
-    if all(x in ngram2 for x in ngram1):
-        return ngram2
-    if all(x in ngram1 for x in ngram2):
-        return ngram1
-
-    # Check both tiling directions
-    def get_tiled(n1, n2):
-        for i in range(1, min(len(n1), len(n2)) + 1):
-            if n1[-i:] == n2[:i]:
-                return n1 + n2[i:]
+    if len(ngram1) == 0:
+        return ngram2.copy()
+    if len(ngram2) == 0:
+        return ngram1.copy()
+    
+    # Check if one is a subset of the other
+    def is_sublist(small, big):
+        for i in range(len(big) - len(small) + 1):
+            if big[i:i+len(small)] == small:
+                return True
+        return False
+    
+    if is_sublist(ngram1, ngram2):
+        # logging.info(f"ngram1: {ngram1} is contained in ngram2: {ngram2}")
+        return ngram2.copy()
+    if is_sublist(ngram2, ngram1):
+        # logging.info(f"ngram2: {ngram2} is contained in ngram1: {ngram1}")
+        return ngram1.copy()
+    
+    # Check for overlapping segments
+    def find_overlap(list1, list2):
+        # Try different overlap sizes, from largest to smallest
+        for overlap_size in range(min(len(list1), len(list2)), 0, -1):
+            # Check if the end of list1 matches the start of list2
+            if list1[-overlap_size:] == list2[:overlap_size]:
+                return list1 + list2[overlap_size:]
         return None
+    
+    # Try both directions for tiling
+    result1 = find_overlap(ngram1, ngram2)
+    if result1:
+        return result1
+        
+    result2 = find_overlap(ngram2, ngram1)
+    if result2:
+        return result2
+    
+    # No overlap found
+    return None
 
-    # Try both tiling orders
-    tiled1 = get_tiled(ngram1, ngram2)
-    tiled2 = get_tiled(ngram2, ngram1)
-
-    # Return the first valid tiling, or None if neither works
-    return tiled1 or tiled2
-
-def n_grams_filter(documents: list[str], question_type: int) -> list[str]:
-    ngrams = [] # List of ngrams
-    scores = [] # List of ngram scores
+def n_grams_filter(documents: list[str], question_type: int, search_object: str) -> list[str]:
+    ngram_dict = {}
 
     # Generate all unigrams, bigrams and trigrams and count frequency in documents
-    for n in range(1, 4):
+    for n in range(2, 5):
         for document in documents:
             n_grams = generate_ngrams(document, n)
-
-            # Find all distinct ngrams from the search document
-            distinct_ngrams = []
             for n_gram in n_grams:
-                if n_gram not in distinct_ngrams:
-                    distinct_ngrams.append(n_gram)
-            
-            # Add all distinct ngrams scores to the result, increasing score by only 1 per document
-            # Scores are also adjusted by positional bias, meaning ngrams appearing earlier in
-            # the document are scored higher. Also score longer ngrams higher
-            max_score = len(distinct_ngrams)
-            for idx, n_gram in enumerate(distinct_ngrams):
-                score = (max_score - idx) / max_score * n
-                if n_gram not in ngrams:
-                    ngrams.append(n_gram)
-                    scores.append(score)
-                else:
-                    scores[ngrams.index(n_gram)] += score
+                if n_gram not in ngram_dict.keys():
+                    ngram_dict[n_gram] = 10*n
 
     # Re-score ngrams based on question type
-    question_bias = 1.5
+    question_bias = 2
     """
     Question types:
     - 1: WHO
@@ -261,49 +287,126 @@ def n_grams_filter(documents: list[str], question_type: int) -> list[str]:
     - 3: WHERE
     - 4: WHEN
     """
-    for idx, ngram in enumerate(ngrams):
+    all_ngrams = list(ngram_dict.keys())
+    for ngram in all_ngrams:
         token = nlp(ngram)
         for ent in token.ents:
+            if ent.text == search_object:
+                ngram_dict[ngram] *= 15
             if question_type == 1:
-                if ent.label_ in ['PERSON', 'ORG']:
-                    scores[idx] *= question_bias
-                    logging.info(f"{ent.text} {ent.label_}")
+                pattern = r'\b(is|was|were|are)\b'
+                if ent.label_ in ['PERSON']:
+                    ngram_dict[ngram] *= question_bias
+                if bool(re.search(pattern, ent.text, re.IGNORECASE)):
+                    ngram_dict[ngram] *= 3
+                if ent.text[0].isupper():
+                    ngram_dict[ngram] *= question_bias
+
             elif question_type == 2:
+                pattern = r'\b(is|was|were|are)\b'
                 if ent.label_ in ['NORP', 'FAC', 'ORG', 'GPE', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LAW', 'LANGUAGE']:
-                    scores[idx] *= question_bias
+                    ngram_dict[ngram] *= question_bias
+                if bool(re.search(pattern, ent.text, re.IGNORECASE)):
+                    ngram_dict[ngram] *= 4
+
             elif question_type == 3:
+                pattern = r'\b(located|nearby|locate|state|region|country)\b'
                 if ent.label_ in ['LOC', 'GPE']:
-                    scores[idx] *= question_bias
+                    ngram_dict[ngram] *= question_bias
+                if bool(re.search(pattern, ent.text.lower(), re.IGNORECASE)):
+                    ngram_dict[ngram] *= 10
+                # if bool(re.search(r'\b(in|at)\b', ent.text, re.IGNORECASE)):
+                #     ngram_dict[ngram] *= 3
+
             elif question_type == 4:
+                pattern = r'\b(born|happen|borned|happened|occurred|occur)\b'
                 if ent.label_ in ['DATE', 'TIME', 'CARDINAL']:
-                    scores[idx] *= question_bias
-    # Tile ngrams until it's not possible anymore
-    ngrams = [ngram.split() for ngram in ngrams]
+                    ngram_dict[ngram] *= 4
+                if bool(re.search(pattern, ent.text.lower(), re.IGNORECASE)):
+                    ngram_dict[ngram] *= 10
+                # if bool(re.search(r'\b(in|at)\b', ent.text, re.IGNORECASE)):
+                #     ngram_dict[ngram] *= 3
+
+
+    # median_score = np.median(list(ngram_dict.values()))
+    # filter_dict = {k: v for k, v in ngram_dict.items() if v >= median_score}
+    # ngram_dict = filter_dict
+
+    ngrams_list = {ngram: ngram.split() for ngram in ngram_dict.keys()}
     
-    # Function to remove tiled ngrams from both lists
+    # Function to remove ngram from dictionary
     def remove_ngram(ngram):
-        scores.remove(scores[ngrams.index(ngram)])
-        ngrams.remove(ngram)
+        del ngram_dict[ngram]
+    ans_dict = {}
+    ans_list = []
 
-    ans_score = max(scores) # Find the ngram with the highest score as a starting point
-    ans = ngrams[scores.index(ans_score)]
+    # Find starting ngram with highest score
+    ans = max(ngram_dict.items(), key=lambda x: x[1])[0]
+    ans_score = ngram_dict[ans]
+    ans_tokens = ngrams_list[ans]
     sep = " "
-    logging.info(f"Starting with ngram \"{sep.join(ans)}\" with score {ans_score}")
+    logging.info(f"Starting with ngram \"{ans}\" with score {ans_score}")
+    ans_dict[ans] = ans_score
+    ans_list.append(ans_tokens)
     remove_ngram(ans)
-    tile = True
-    while tile:
-        tile = False
-        max_score = max(scores) # Find the ngram with the highest score as a starting point
-        max_ngram = ngrams[scores.index(max_score)]
-        tile_result = tile_ngrams(max_ngram, ans)
-        if tile_result:
-            logging.info(f"Tiled \"{sep.join(max_ngram)}\" to \"{sep.join(ans)}\" to form\n\"{sep.join(tile_result)}\"")
-            tile = True
-            ans = tile_result
-            ans_score += max_score
-        remove_ngram(max_ngram)
+    
+    
+    # while tile and ngram_dict:
+    tile_result = True
+    while ngram_dict:
+        skip = False
+        # Find ngram with highest score
+        max_ngram = max(ngram_dict.items(), key=lambda x: x[1])[0]
+        max_score = ngram_dict[max_ngram]
+        max_tokens = ngrams_list[max_ngram]
 
-    return ans
+        k = 0
+        while k < len(ans_list):
+            if all(elem in ans_list[k] for elem in max_tokens):
+                skip = True
+                remove_ngram(max_ngram)
+                break
+            else:
+                tile_result = tile_ngrams(max_tokens, ans_list[k])
+                if tile_result:
+
+                    ans_list.append(tile_result)
+
+                    ans_dict[sep.join(tile_result)] = max_score + ans_dict[sep.join(ans_list[k])]
+        
+                    del ans_dict[sep.join(ans_list[k])]
+                    ans_list.remove(ans_list[k])
+                    remove_ngram(max_ngram)
+                    k = len(ans_list)
+                    
+                else:
+                    k += 1
+
+
+        if not tile_result and not skip:
+            ans_list.append(max_tokens)
+            ans_dict[max_ngram] = max_score
+
+            remove_ngram(max_ngram)
+    print("\nAnswer Dictionary:", ans_dict)
+    breakpoint()
+    print("\nAnswer:", max(ans_dict, key = ans_dict.get))
+    raw_ans = max(ans_dict, key = ans_dict.get)
+    if question_type in [1, 2]:
+        pattern = r'(?:is|was|are|were)\s+(.*?)(?:(?<!\b[A-Za-z])\.|$)'
+        matches = re.findall(pattern, raw_ans, re.IGNORECASE)
+        return matches[0] if matches else raw_ans
+    elif question_type == 3:
+        pattern = r'(?:locate[d]?\s+)(.*?)(?:\.|\Z)'
+        matches = re.findall(pattern, raw_ans, re.IGNORECASE)
+        return matches[0] if matches else raw_ans
+    elif question_type == 4:
+        pattern = r'(?:heppen[ed]?\s+)(.*?)(?:\.|\Z)'
+        matches = re.findall(pattern, raw_ans, re.IGNORECASE)
+        return matches[0] if matches else raw_ans
+    
+    return raw_ans
+            
 
 def log_write(file, text, way = "a"):
     """
@@ -322,23 +425,37 @@ def main():
         log_write(LOG_FILE, "This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program.\n", way = "w")
     
     print("This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program.")
-
-    while True:
-        question = input("Please enter a question: ").replace("?", "")
+    questions =[
+            "Where is George Mason University",
+            "Where is Taiwan",
+            "Where is Japan",
+            "Who is Donald Trump",
+            "Who is the first president of the United States",
+            "Who is Barack Obama",
+            "When was George Washington born",
+            "When was the first iPhone released",
+            "When was the Steve Jobs born",
+            "What is a computer",
+            "What is basketball",
+            "What is pickle ball"
+        ]
+    # while True:
+    for question in questions:
+        # question = input("Please enter a question: ").replace("?", "")
         log_write(LOG_FILE, f"Question: {question}\n")
         if question == "exit":
             print("Goodbye!")
             log_write(LOG_FILE, "Response: Goodbye!\n")
             break
 
-        query, search_object, type = prep_question(question)
+        query, search_object, question_type = prep_question(question)
         query = query.lower()
 
         log_write(LOG_FILE, f"Search_Object: {search_object}\n")
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
 
         documents = data_cleaning(search_wiki(search_object))
-        log_write(LOG_FILE, f"Documents: {documents}\n")
+        # log_write(LOG_FILE, f"Documents: {question}\n")
 
         if len(documents) == 0:
             print("I am sorry, I don't know the answer.")
@@ -347,21 +464,20 @@ def main():
         logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
         documents_vector, query_vector = tfidf(documents, query, normalization=True)
         similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
-        top_k_indices = top_k_scores(similarity, k = 3)
+        top_k_indices = top_k_scores(similarity, k = 5)
         select_docs = [documents[idx] for idx in top_k_indices]
-        answer = n_grams_filter(select_docs, type)
-        logging.info(f"Answer: {answer}")
-        result = []
-        for sen in answer:
-            for word in sen.split():
-                if word not in result:
-                    result.append(word)
-        if len(result) > 0:
-            log_write(LOG_FILE, f"Response: {query} {' '.join(result)}\n")
-            print(f"{query[0].upper()}{query[1:]} {' '.join(result)}")
+        log_write(LOG_FILE, f"Documents: {select_docs}\n")
+
+        answer = n_grams_filter(select_docs, question_type, search_object)
+        pattern = r'^(.*?(?:(?<!\b[A-Za-z])\.))'
+        matches = re.findall(pattern, answer)
+        answer = matches[0] if matches else answer
+        # logging.info(f"Answer: {answer}")
+        Ans = tile_ngrams(query.split(" "), answer.split(" "))
+        if Ans:
+            print("\nAnswer:", " ".join(Ans))
         else:
-            log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n")
-            print("I am sorry, I don't know the answer.")
+            print("\nAnswer:", f"{query[0].upper()}{query[1:]} {answer}")
 
 
 if __name__ == "__main__":
