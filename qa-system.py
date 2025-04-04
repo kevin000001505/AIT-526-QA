@@ -38,14 +38,11 @@ def search_wiki(search_object: str) -> list[str]:
     # logging.info(f"Successfully Search the Number of item: {results}")
     for result in results:
         try:
-            raw_content = wikipedia.page(result).content.split("\n")
-            for content in raw_content:
-                if len(content) > 20:
-                    documents.append(content)
-            documents.append(wikipedia.summary(result))
+            documents.append(wikipedia.summary(result, sentences = 2))
         except wikipedia.PageError as e:
             print(f"\nPageError: {e}")
             print("\nChange another search object.")
+            documents.append(wikipedia.summary(search_object, sentences = 2))
             continue
         except Exception:
             continue
@@ -118,94 +115,6 @@ def prep_question(question: str) -> Tuple[str, str, int]:
         print("Invalid Question")
         return None, None, None
 
-def normalize_tfidf(tfidf_matrix):
-    """
-    Normalize each document vector (row) in the TF-IDF matrix using L2 norm.
-    
-    Parameters:
-    - tfidf_matrix (numpy.ndarray): 2D array of shape (n_documents, n_terms)
-    
-    Returns:
-    - numpy.ndarray: The normalized TF-IDF matrix
-    """
-    norms = np.linalg.norm(tfidf_matrix, axis=1, keepdims=True)
-    
-    norms[norms == 0] = 1
-    
-    normalized_matrix = tfidf_matrix / norms
-    return normalized_matrix
-
-def tfidf(documents: list[str], query: str, normalization = False) -> np.ndarray:
-    """
-    Calculate the tfidf for the documents and the query.
-
-    Args:
-        documents: List of documents
-        query: The query
-
-    Returns:
-        np.ndarray: The tfidf matrix for the documents
-        np.ndarray: The tfidf vector for the query
-    """
-    unique_words = {word for doc in documents for word in doc.split()}
-    word_to_idx = {word: idx for idx, word in enumerate(unique_words)}
-    tf = np.zeros((len(documents), len(unique_words)))
-    for idx, doc in enumerate(documents):
-        for word in doc.split():
-            tf[idx, word_to_idx[word]] += 1
-    df = (tf != 0).sum(axis=0)
-    idf = np.log(len(documents) / df) + 1
-    tfidf = tf * idf
-    query_tf = np.zeros((1, len(unique_words)))
-    for word in data_cleaning([query])[0].split():
-        if word in word_to_idx:
-            query_tf[0, word_to_idx[word]] += 1
-    query_vector = query_tf * idf
-    if normalization:
-        tfidf = normalize_tfidf(tfidf)
-    return tfidf, query_vector
-
-def cosine_similarity(vector_a: np.array, vector_b: np.array) -> float:
-    """
-    Calculate the cosine similarity between two vectors.
-    Cosine similarity measures how similar two vectors are by calculating the cosine of the angle between them.
-
-    Args:
-        vector_a: First vector (numpy array)
-        vector_b: Second vector (numpy array)
-
-    Returns:
-        float: Similarity score between -1 and 1
-               1: Vectors are identical
-               0: Vectors are perpendicular
-              -1: Vectors are opposite
-    """
-
-    dot_product = np.dot(vector_a, vector_b)
-
-    magnitude_a = np.linalg.norm(vector_a)
-    magnitude_b = np.linalg.norm(vector_b)
-    if magnitude_a == 0 or magnitude_b == 0:
-        return 0
-    similarity = dot_product / (magnitude_a * magnitude_b)
-
-    return similarity
-
-def top_k_scores(similarity: list[float], k: int) -> list[int]:
-    """
-    Return the top k scores.
-
-    Args:
-        similarity: List of similarity scores
-        k: The number of top scores to return
-
-    Returns:
-        list[int]: The indices of the top k scores
-    """
-    flat_scores = np.array([s[0] if s != 0 else 0 for s in similarity])
-    sorted_indices = np.argsort(flat_scores)[::-1]
-    top_k_indices = sorted_indices[:k]
-    return top_k_indices
 
 def generate_ngrams(text, n) -> list[str]:
     n_grams = ngrams(nltk.word_tokenize(text), n)
@@ -276,10 +185,10 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
             n_grams = generate_ngrams(document, n)
             for n_gram in n_grams:
                 if n_gram not in ngram_dict.keys():
-                    ngram_dict[n_gram] = 10*n
+                    ngram_dict[n_gram] = n
 
     # Re-score ngrams based on question type
-    question_bias = 2
+    question_bias = 10
     """
     Question types:
     - 1: WHO
@@ -292,7 +201,7 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
         token = nlp(ngram)
         for ent in token.ents:
             if ent.text == search_object:
-                ngram_dict[ngram] *= 15
+                ngram_dict[ngram] *= 50
             if question_type == 1:
                 pattern = r'\b(is|was|were|are)\b'
                 if ent.label_ in ['PERSON']:
@@ -303,34 +212,34 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
                     ngram_dict[ngram] *= question_bias
 
             elif question_type == 2:
-                pattern = r'\b(is|was|were|are)\b'
+                pattern = r'^(is|was|were|are)\b'
                 if ent.label_ in ['NORP', 'FAC', 'ORG', 'GPE', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LAW', 'LANGUAGE']:
                     ngram_dict[ngram] *= question_bias
                 if bool(re.search(pattern, ent.text, re.IGNORECASE)):
-                    ngram_dict[ngram] *= 4
+                    ngram_dict[ngram] *= question_bias
 
             elif question_type == 3:
-                pattern = r'\b(located|nearby|locate|state|region|country)\b'
-                if ent.label_ in ['LOC', 'GPE']:
+                pattern = r'^(located|nearby|near|locate|region|country)\b'
+                if ent.label_ in ['GPE']:
                     ngram_dict[ngram] *= question_bias
                 if bool(re.search(pattern, ent.text.lower(), re.IGNORECASE)):
-                    ngram_dict[ngram] *= 10
-                # if bool(re.search(r'\b(in|at)\b', ent.text, re.IGNORECASE)):
-                #     ngram_dict[ngram] *= 3
+                    ngram_dict[ngram] *= 8
+                if bool(re.search(r'\b(in|at)\b', ent.text, re.IGNORECASE)):
+                    ngram_dict[ngram] *= 3
 
             elif question_type == 4:
-                pattern = r'\b(born|happen|borned|happened|occurred|occur)\b'
+                pattern = r'^(born|happen|borned|happened|occurred|occur)\b'
                 if ent.label_ in ['DATE', 'TIME', 'CARDINAL']:
-                    ngram_dict[ngram] *= 4
+                    ngram_dict[ngram] *= question_bias
                 if bool(re.search(pattern, ent.text.lower(), re.IGNORECASE)):
-                    ngram_dict[ngram] *= 10
-                # if bool(re.search(r'\b(in|at)\b', ent.text, re.IGNORECASE)):
-                #     ngram_dict[ngram] *= 3
+                    ngram_dict[ngram] *= 5
+                if bool(re.search(r'^(in|at)\b', ent.text, re.IGNORECASE)):
+                    ngram_dict[ngram] *= 3
 
 
-    # median_score = np.median(list(ngram_dict.values()))
-    # filter_dict = {k: v for k, v in ngram_dict.items() if v >= median_score}
-    # ngram_dict = filter_dict
+    median_score = np.percentile(list(ngram_dict.values()), 50)
+    filter_dict = {k: v for k, v in ngram_dict.items() if v >= median_score}
+    ngram_dict = filter_dict
 
     ngrams_list = {ngram: ngram.split() for ngram in ngram_dict.keys()}
     
@@ -361,6 +270,7 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
         max_tokens = ngrams_list[max_ngram]
 
         k = 0
+        ans_list = sorted(ans_list, key=lambda x: ans_dict[" ".join(x)], reverse=True)
         while k < len(ans_list):
             if all(elem in ans_list[k] for elem in max_tokens):
                 skip = True
@@ -369,7 +279,9 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
             else:
                 tile_result = tile_ngrams(max_tokens, ans_list[k])
                 if tile_result:
-
+                    # logging.info(f"Tiling ngram \"{max_ngram}\" with score {max_score} with \"{sep.join(ans_list[k])}\"")
+                    # logging.info(f"Result: {sep.join(tile_result)}")
+                    # print('--'*50)
                     ans_list.append(tile_result)
 
                     ans_dict[sep.join(tile_result)] = max_score + ans_dict[sep.join(ans_list[k])]
@@ -388,22 +300,23 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
             ans_dict[max_ngram] = max_score
 
             remove_ngram(max_ngram)
-    print("\nAnswer Dictionary:", ans_dict)
-    breakpoint()
-    print("\nAnswer:", max(ans_dict, key = ans_dict.get))
+    # print("\nAnswer Dictionary:", ans_dict)
+    # print('--'*50)
+    # print("\nAnswer:", max(ans_dict, key = ans_dict.get))
+    # breakpoint()
     raw_ans = max(ans_dict, key = ans_dict.get)
-    if question_type in [1, 2]:
-        pattern = r'(?:is|was|are|were)\s+(.*?)(?:(?<!\b[A-Za-z])\.|$)'
-        matches = re.findall(pattern, raw_ans, re.IGNORECASE)
-        return matches[0] if matches else raw_ans
-    elif question_type == 3:
-        pattern = r'(?:locate[d]?\s+)(.*?)(?:\.|\Z)'
-        matches = re.findall(pattern, raw_ans, re.IGNORECASE)
-        return matches[0] if matches else raw_ans
-    elif question_type == 4:
-        pattern = r'(?:heppen[ed]?\s+)(.*?)(?:\.|\Z)'
-        matches = re.findall(pattern, raw_ans, re.IGNORECASE)
-        return matches[0] if matches else raw_ans
+    # if question_type in [1, 2]:
+    #     pattern = r'(?:is|was|are|were)\s+(.*?)(?:(?<!\b[A-Za-z])\.|$)'
+    #     matches = re.findall(pattern, raw_ans, re.IGNORECASE)
+    #     return matches[0] if matches else raw_ans
+    # elif question_type == 3:
+    #     pattern = r'(?:locate[d]?\s+)(.*?)(?:\.|\Z)'
+    #     matches = re.findall(pattern, raw_ans, re.IGNORECASE)
+    #     return matches[0] if matches else raw_ans
+    # elif question_type == 4:
+    #     pattern = r'(?:heppen[ed]?\s+)(.*?)(?:\.|\Z)'
+    #     matches = re.findall(pattern, raw_ans, re.IGNORECASE)
+    #     return matches[0] if matches else raw_ans
     
     return raw_ans
             
@@ -426,6 +339,7 @@ def main():
     
     print("This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program.")
     questions =[
+            "What is the capital of the United States",
             "Where is George Mason University",
             "Where is Taiwan",
             "Where is Japan",
@@ -434,10 +348,6 @@ def main():
             "Who is Barack Obama",
             "When was George Washington born",
             "When was the first iPhone released",
-            "When was the Steve Jobs born",
-            "What is a computer",
-            "What is basketball",
-            "What is pickle ball"
         ]
     # while True:
     for question in questions:
@@ -453,7 +363,6 @@ def main():
 
         log_write(LOG_FILE, f"Search_Object: {search_object}\n")
         logging.info(f"Answer format: {query}, Search Object: {search_object}")
-
         documents = data_cleaning(search_wiki(search_object))
         # log_write(LOG_FILE, f"Documents: {question}\n")
 
@@ -461,23 +370,16 @@ def main():
             print("I am sorry, I don't know the answer.")
             log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n")
             continue
-        logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
-        documents_vector, query_vector = tfidf(documents, query, normalization=True)
-        similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
-        top_k_indices = top_k_scores(similarity, k = 5)
-        select_docs = [documents[idx] for idx in top_k_indices]
-        log_write(LOG_FILE, f"Documents: {select_docs}\n")
-
-        answer = n_grams_filter(select_docs, question_type, search_object)
+        answer = n_grams_filter(documents, question_type, search_object)
         pattern = r'^(.*?(?:(?<!\b[A-Za-z])\.))'
         matches = re.findall(pattern, answer)
         answer = matches[0] if matches else answer
-        # logging.info(f"Answer: {answer}")
+        logging.info(f"Answer: {answer}")
         Ans = tile_ngrams(query.split(" "), answer.split(" "))
         if Ans:
-            print("\nAnswer:", " ".join(Ans))
+            print("\nAnswer:", " ".join(Ans), "\n---------------")
         else:
-            print("\nAnswer:", f"{query[0].upper()}{query[1:]} {answer}")
+            print("\nAnswer:", f"{query[0].upper()}{query[1:]} {answer}", "\n", "---------------"*10)
 
 
 if __name__ == "__main__":
