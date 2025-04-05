@@ -159,7 +159,6 @@ def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]):
                 return list1 + list2[overlap_size:]
         return None
 
-    # Only attempt tiling with ans_ngrams (the higher-score ngram) as the left side and ngram1 as the candidate to append
     result = find_overlap(ans_ngrams, ngram1)
     if result and len(result) > len(ans_ngrams):
         return result
@@ -168,7 +167,7 @@ def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]):
     return None
 
 
-def n_grams_filter(documents: list[str], question_type: int) -> str:
+def n_grams_filter(documents: list[str], question_type: int, search_object: str) -> str:
     all_ngram_dict = {}
 
     # Generate all unigrams, bigrams and trigrams and count frequency in documents
@@ -201,6 +200,8 @@ def n_grams_filter(documents: list[str], question_type: int) -> str:
             pattern = r"^(is|was|were|are)\b"
             if bool(re.search(pattern, ngram, re.IGNORECASE)):
                 all_ngram_dict[ngram] *= question_bias
+            if search_object in ngram:
+                all_ngram_dict[ngram] *= 5
 
         elif question_type == 3:
             pattern = r"^(located|nearby|near|locate|region|country|lies|between)\b"
@@ -235,25 +236,29 @@ def n_grams_filter(documents: list[str], question_type: int) -> str:
     first_ngram_tokens = all_ngrams_list[first_ngram]
     sep = " "
     logging.info(f'Starting with ngram "{first_ngram}" with score {first_ngram_score}')
+
     ans_ngrams_dict[first_ngram] = first_ngram_score
     ans_ngrams_list.append(first_ngram_tokens)
     remove_ngram(first_ngram)
+
     pattern = r"\.\s*$"
-    keep = True
-    while keep:
+
+    while True:
         for ngram, _ in all_ngram_dict.items():
             tile_result = tile_ngrams(all_ngrams_list[ngram], ans_ngrams_list[0])
-            if tile_result:
 
+            if tile_result:
                 ans_ngrams_list.pop()
                 ans_ngrams_list.append(tile_result)
-
                 remove_ngram(ngram)
+
+                # If there is a senetence end in a period stop tiling and return the result
                 if bool(re.search(pattern, sep.join(tile_result))):
                     return sep.join(ans_ngrams_list[0])
                 break
 
         if tile_result is None:
+            # No more ngrams to tile, return the result
             return sep.join(ans_ngrams_list[0])
 
 
@@ -281,51 +286,48 @@ def main():
     print(
         "This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program."
     )
-    questions = [
-        "When was George Washington born",
-        "Where is George Mason University",
-        "Where is Taiwan",
-        "Where is Japan",
-        "Who is Donald Trump",
-        "Who is the first president of the United States",
-        "Who is Barack Obama",
-        "When was the first iPhone released",
-    ]
-    # while True:
-    for question in questions:
-        # question = input("Please enter a question: ").replace("?", "")
-        log_write(LOG_FILE, f"Question: {question}\n")
-        if question == "exit":
-            print("Goodbye!")
-            log_write(LOG_FILE, "Response: Goodbye!\n")
-            break
+    while True:
+        try:
+            question = input("Please enter a question: ").replace("?", "")
+            log_write(LOG_FILE, f"Question: {question}\n")
+            if question == "exit":
+                print("Goodbye!")
+                log_write(LOG_FILE, "Response: Goodbye!\n\n")
+                break
 
-        query, search_object, question_type = prep_question(question)
-        query = query.lower()
+            query, search_object, question_type = prep_question(question)
+            query = query.lower()
+            log_write(LOG_FILE, f"Search_Object: {search_object}\n")
+            logging.info(f"Answer format: {query}, Search Object: {search_object}")
 
-        log_write(LOG_FILE, f"Search_Object: {search_object}\n")
-        logging.info(f"Answer format: {query}, Search Object: {search_object}")
-        documents = data_cleaning(search_wiki(search_object))
+            documents = data_cleaning(search_wiki(search_object))
+            if len(documents) == 0:
+                print("I am sorry, I don't know the answer.")
+                log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n\n")
+                continue
 
-        if len(documents) == 0:
-            print("I am sorry, I don't know the answer.")
-            log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n")
+            answer = n_grams_filter(documents, question_type, search_object)
+            answer = answer.replace(". ", "")
+            logging.info(f"Answer: {answer}")
+            
+            final_answer = tile_ngrams(answer.lower().split(" "), query.split(" "))
+            if final_answer:
+                print("\nAnswer:", " ".join(final_answer), "\n---------------")
+                log_write(LOG_FILE, f"Response: {' '.join(final_answer)}\n\n")
+            else:
+                print(
+                    "\nAnswer:",
+                    f"{query[0].upper()}{query[1:]} {answer}",
+                    "\n",
+                    "---------------" * 10,
+                )
+                log_write(
+                    LOG_FILE, f"Response: {query[0].upper()}{query[1:]} {answer}\n\n"
+                )
+        except Exception:
+            print("Please enter a valid question.")
+            log_write(LOG_FILE, "Response: Please enter a valid question.\n\n")
             continue
-        answer = n_grams_filter(documents, question_type)
-        answer = answer.replace(". ", "")
-        logging.info(f"Answer: {answer}")
-        Ans = tile_ngrams(answer.lower().split(" "), query.split(" "))
-        if Ans:
-            print("\nAnswer:", " ".join(Ans), "\n---------------")
-            log_write(LOG_FILE, f"Response: {' '.join(Ans)}\n\n")
-        else:
-            print(
-                "\nAnswer:",
-                f"{query[0].upper()}{query[1:]} {answer}",
-                "\n",
-                "---------------" * 10,
-            )
-            log_write(LOG_FILE, f"Response: {query[0].upper()}{query[1:]} {answer}\n\n")
 
 
 if __name__ == "__main__":
