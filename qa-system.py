@@ -126,7 +126,7 @@ def generate_ngrams(text, n) -> list[str]:
     return [" ".join(grams) for grams in n_grams]
 
 
-def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]) -> list[str]:
+def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]):
     """
     Tile two lists of strings together if ngram2 can be appended to ngram1 based on an overlapping segment.
 
@@ -138,14 +138,17 @@ def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]) -> list[str]:
         list[str]: Combined list if tiling is possible, None otherwise
 
     Examples:
-        ['A', 'B', 'C'], ['B', 'C', 'D'] -> ['A', 'B', 'C', 'D']
-        ['love', 'you'], ['I', 'will', 'always', 'love'] -> None  # since tiling is not on the right
+        ['B', 'C', 'D'], ['A', 'B', 'C'], -> ['A', 'B', 'C', 'D']
+        ['I', 'will', 'always', 'love'], ['love', 'you'] -> ['love', 'you']  # since tiling is not on the right
     """
     # Handle containment cases
     if len(ngram1) == 0:
         return ans_ngrams.copy()
     if len(ans_ngrams) == 0:
         return ngram1.copy()
+
+    if all(elem in ans_ngrams for elem in ngram1):
+        return None
 
     # Check for overlapping segments (only on the right side)
     def find_overlap(list1, list2):
@@ -165,18 +168,16 @@ def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]) -> list[str]:
     return None
 
 
-def n_grams_filter(
-    documents: list[str], question_type: int, search_object: str
-) -> list[str]:
-    ngram_dict = {}
+def n_grams_filter(documents: list[str], question_type: int) -> str:
+    all_ngram_dict = {}
 
     # Generate all unigrams, bigrams and trigrams and count frequency in documents
     for n in range(2, 5):
         for document in documents:
             n_grams = generate_ngrams(document, n)
             for n_gram in n_grams:
-                if n_gram not in ngram_dict.keys():
-                    ngram_dict[n_gram] = n
+                if n_gram not in all_ngram_dict.keys():
+                    all_ngram_dict[n_gram] = n
 
     # Re-score ngrams based on question type
     question_bias = 3
@@ -187,105 +188,73 @@ def n_grams_filter(
     - 3: WHERE
     - 4: WHEN
     """
-    all_ngrams = list(ngram_dict.keys())
+    all_ngrams = list(all_ngram_dict.keys())
     for ngram in all_ngrams:
         if question_type == 1:
             pattern = r"\b(is|was|were|are)\b"
             if bool(re.search(pattern, ngram, re.IGNORECASE)):
-                ngram_dict[ngram] *= 3
+                all_ngram_dict[ngram] *= 3
             if ngram[0].isupper():
-                ngram_dict[ngram] *= question_bias
+                all_ngram_dict[ngram] *= question_bias
 
         elif question_type == 2:
             pattern = r"^(is|was|were|are)\b"
             if bool(re.search(pattern, ngram, re.IGNORECASE)):
-                ngram_dict[ngram] *= question_bias
+                all_ngram_dict[ngram] *= question_bias
 
         elif question_type == 3:
             pattern = r"^(located|nearby|near|locate|region|country|lies|between)\b"
             if bool(re.search(pattern, ngram.lower(), re.IGNORECASE)):
-                ngram_dict[ngram] *= 8
+                all_ngram_dict[ngram] *= 8
             if ngram[0].isupper():
-                ngram_dict[ngram] *= question_bias
+                all_ngram_dict[ngram] *= question_bias
 
         elif question_type == 4:
             pattern = r"^(born|happen|borned|happened|occurred|occur|january|february|march|april|may|june|july|august|september|october|november|december)\b"
             if bool(re.search(pattern, ngram.lower(), re.IGNORECASE)):
-                ngram_dict[ngram] *= 8
-            if bool(re.search(r'\d+', ngram.lower(), re.IGNORECASE)):
-                ngram_dict[ngram] *= question_bias
+                all_ngram_dict[ngram] *= 8
+            if bool(re.search(r"\d+", ngram.lower(), re.IGNORECASE)):
+                all_ngram_dict[ngram] *= question_bias
 
-    median_score = np.percentile(list(ngram_dict.values()), 10)
-    filter_dict = {k: v for k, v in ngram_dict.items() if v >= median_score}
-    ngram_dict = filter_dict
+    median_score = np.percentile(list(all_ngram_dict.values()), 50)
+    filter_dict = {k: v for k, v in all_ngram_dict.items() if v >= median_score}
+    all_ngram_dict = filter_dict
 
-    ngrams_list = {ngram: ngram.split() for ngram in ngram_dict.keys()}
+    all_ngrams_list = {ngram: ngram.split() for ngram in all_ngram_dict.keys()}
 
     # Function to remove ngram from dictionary
     def remove_ngram(ngram):
-        del ngram_dict[ngram]
+        del all_ngram_dict[ngram]
 
     ans_ngrams_dict = {}
     ans_ngrams_list = []
 
     # Find starting ngram with highest score
-    first_ngram = max(ngram_dict.items(), key=lambda x: x[1])[0]
-    first_ngram_score = ngram_dict[first_ngram]
-    first_ngram_tokens = ngrams_list[first_ngram]
+    first_ngram = max(all_ngram_dict.items(), key=lambda x: x[1])[0]
+    first_ngram_score = all_ngram_dict[first_ngram]
+    first_ngram_tokens = all_ngrams_list[first_ngram]
     sep = " "
     logging.info(f'Starting with ngram "{first_ngram}" with score {first_ngram_score}')
     ans_ngrams_dict[first_ngram] = first_ngram_score
     ans_ngrams_list.append(first_ngram_tokens)
     remove_ngram(first_ngram)
+    pattern = r"\.\s*$"
+    keep = True
+    while keep:
+        for ngram, _ in all_ngram_dict.items():
+            tile_result = tile_ngrams(all_ngrams_list[ngram], ans_ngrams_list[0])
+            if tile_result:
 
-    # while tile and ngram_dict:
-    tile_result = True
-    while ngram_dict:
-        skip = False
-        # Find ngram with highest score
-        max_ngram = max(ngram_dict.items(), key=lambda x: x[1])[0]
-        max_ngram_score = ngram_dict[max_ngram]
-        max_ngram_tokens = ngrams_list[max_ngram]
+                ans_ngrams_list.pop()
+                ans_ngrams_list.append(tile_result)
 
-        k = 0
-        ans_ngrams_list = sorted(ans_ngrams_list, key=lambda x: ans_ngrams_dict[" ".join(x)], reverse=True)
-        while k < len(ans_ngrams_list):
-            # Check if ngram is a subset of ans_list[k]
-            if all(elem in ans_ngrams_list[k] for elem in max_ngram_tokens):
-                skip = True
-                remove_ngram(max_ngram)
+                remove_ngram(ngram)
+                if bool(re.search(pattern, sep.join(tile_result))):
+                    return sep.join(ans_ngrams_list[0])
                 break
-            else:
-                tile_result = tile_ngrams(max_ngram_tokens, ans_ngrams_list[k])
-                if tile_result:
-                    logging.info(
-                        f'Tiling "{max_ngram}" with "{sep.join(ans_ngrams_list[k])}" to get "{sep.join(tile_result)}"'
-                    )
-                    ans_ngrams_list.append(tile_result)
 
-                    ans_ngrams_dict[sep.join(tile_result)] = (
-                        max_ngram_score + ans_ngrams_dict[sep.join(ans_ngrams_list[k])]
-                    )
-
-                    del ans_ngrams_dict[sep.join(ans_ngrams_list[k])]
-                    ans_ngrams_list.remove(ans_ngrams_list[k])
-                    remove_ngram(max_ngram)
-                    k = len(ans_ngrams_list)
-
-                else:
-                    k += 1
-
-        if not tile_result and not skip:
-            ans_ngrams_list.append(max_ngram_tokens)
-            ans_ngrams_dict[max_ngram] = max_ngram_score
-
-            remove_ngram(max_ngram)
-    # print("\nAnswer Dictionary:", ans_dict)
-    # print('--'*50)
-    # print("\nAnswer:", max(ans_dict, key = ans_dict.get))
-    raw_ans = max(ans_ngrams_dict, key=ans_ngrams_dict.get)
-
-    return raw_ans
+        if tile_result is None:
+            return sep.join(ans_ngrams_list[0])
 
 
 def log_write(file, text, way="a"):
@@ -342,7 +311,7 @@ def main():
             print("I am sorry, I don't know the answer.")
             log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n")
             continue
-        answer = n_grams_filter(documents, question_type, search_object)
+        answer = n_grams_filter(documents, question_type)
         answer = answer.replace(". ", "")
         logging.info(f"Answer: {answer}")
         Ans = tile_ngrams(answer.lower().split(" "), query.split(" "))
@@ -355,7 +324,6 @@ def main():
                 "\n",
                 "---------------" * 10,
             )
-        breakpoint()
 
 
 if __name__ == "__main__":
