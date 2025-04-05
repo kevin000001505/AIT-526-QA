@@ -275,6 +275,7 @@ def log_write(file, text, way="a"):
 
 
 def main():
+    LOG_FILE = "qa_log.txt"
     if not os.path.exists(LOG_FILE):
         log_write(
             LOG_FILE,
