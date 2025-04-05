@@ -109,7 +109,7 @@ def prep_question(question: str) -> Tuple[str, str, int]:
     elif question.lower().startswith("where"):
         pattern = r"(?i)where\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1) + " located in", match.group(2), 3
+        return match.group(2) + " " + match.group(1) + " located", match.group(2), 3
 
     elif question.lower().startswith("when"):
         pattern = r"(?i)when\s+(is|was|are|were)\s+(.*)"
@@ -126,42 +126,28 @@ def generate_ngrams(text, n) -> list[str]:
     return [" ".join(grams) for grams in n_grams]
 
 
-def tile_ngrams(ngram1: list[str], ngram2: list[str]) -> list[str]:
+def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]) -> list[str]:
     """
-    Tile two lists of strings together if they have an overlapping portion.
+    Tile two lists of strings together if ngram2 can be appended to ngram1 based on an overlapping segment.
 
     Args:
-        ngram1: First list of strings
-        ngram2: Second list of strings
+        ngram1: First list of strings (left side, assumed to have the higher score)
+        ngram2: Second list of strings (to be appended on the right)
 
     Returns:
         list[str]: Combined list if tiling is possible, None otherwise
 
     Examples:
         ['A', 'B', 'C'], ['B', 'C', 'D'] -> ['A', 'B', 'C', 'D']
-        ['love', 'you'], ['I', 'will', 'always', 'love'] -> ['I', 'will', 'always', 'love', 'you']
+        ['love', 'you'], ['I', 'will', 'always', 'love'] -> None  # since tiling is not on the right
     """
     # Handle containment cases
     if len(ngram1) == 0:
-        return ngram2.copy()
-    if len(ngram2) == 0:
+        return ans_ngrams.copy()
+    if len(ans_ngrams) == 0:
         return ngram1.copy()
 
-    # Check if one is a subset of the other
-    def is_sublist(small, big):
-        for i in range(len(big) - len(small) + 1):
-            if big[i : i + len(small)] == small:
-                return True
-        return False
-
-    if is_sublist(ngram1, ngram2):
-        # logging.info(f"ngram1: {ngram1} is contained in ngram2: {ngram2}")
-        return ngram2.copy()
-    if is_sublist(ngram2, ngram1):
-        # logging.info(f"ngram2: {ngram2} is contained in ngram1: {ngram1}")
-        return ngram1.copy()
-
-    # Check for overlapping segments
+    # Check for overlapping segments (only on the right side)
     def find_overlap(list1, list2):
         # Try different overlap sizes, from largest to smallest
         for overlap_size in range(min(len(list1), len(list2)), 0, -1):
@@ -170,16 +156,12 @@ def tile_ngrams(ngram1: list[str], ngram2: list[str]) -> list[str]:
                 return list1 + list2[overlap_size:]
         return None
 
-    # Try both directions for tiling
-    result1 = find_overlap(ngram1, ngram2)
-    if result1:
-        return result1
+    # Only attempt tiling with ans_ngrams (the higher-score ngram) as the left side and ngram1 as the candidate to append
+    result = find_overlap(ans_ngrams, ngram1)
+    if result and len(result) > len(ans_ngrams):
+        return result
 
-    result2 = find_overlap(ngram2, ngram1)
-    if result2:
-        return result2
-
-    # No overlap found
+    # No valid tiling extension found; return None to indicate that no tiling occurred
     return None
 
 
@@ -197,7 +179,7 @@ def n_grams_filter(
                     ngram_dict[n_gram] = n
 
     # Re-score ngrams based on question type
-    question_bias = 4
+    question_bias = 3
     """
     Question types:
     - 1: WHO
@@ -207,49 +189,33 @@ def n_grams_filter(
     """
     all_ngrams = list(ngram_dict.keys())
     for ngram in all_ngrams:
-        token = nlp(ngram)
-        for ent in token.ents:
-            if question_type == 1:
-                pattern = r"\b(is|was|were|are)\b"
-                if ent.label_ in ["PERSON"]:
-                    ngram_dict[ngram] *= question_bias
-                if bool(re.search(pattern, ent.text, re.IGNORECASE)):
-                    ngram_dict[ngram] *= 6
-                if ent.text[0].isupper():
-                    ngram_dict[ngram] *= question_bias
+        if question_type == 1:
+            pattern = r"\b(is|was|were|are)\b"
+            if bool(re.search(pattern, ngram, re.IGNORECASE)):
+                ngram_dict[ngram] *= 3
+            if ngram[0].isupper():
+                ngram_dict[ngram] *= question_bias
 
-            elif question_type == 2:
-                pattern = r"^(is|was|were|are)\b"
-                if ent.label_ in [
-                    "NORP",
-                    "FAC",
-                    "ORG",
-                    "GPE",
-                    "PRODUCT",
-                    "EVENT",
-                    "WORK_OF_ART",
-                    "LAW",
-                    "LANGUAGE",
-                ]:
-                    ngram_dict[ngram] *= question_bias
-                if bool(re.search(pattern, ent.text, re.IGNORECASE)):
-                    ngram_dict[ngram] *= question_bias
+        elif question_type == 2:
+            pattern = r"^(is|was|were|are)\b"
+            if bool(re.search(pattern, ngram, re.IGNORECASE)):
+                ngram_dict[ngram] *= question_bias
 
-            elif question_type == 3:
-                pattern = r"^(located|nearby|near|locate|region|country|lies|between)\b"
-                if ent.label_ in ["GPE"]:
-                    ngram_dict[ngram] *= question_bias
-                if bool(re.search(pattern, ent.text.lower(), re.IGNORECASE)):
-                    ngram_dict[ngram] *= 8
+        elif question_type == 3:
+            pattern = r"^(located|nearby|near|locate|region|country|lies|between)\b"
+            if bool(re.search(pattern, ngram.lower(), re.IGNORECASE)):
+                ngram_dict[ngram] *= 8
+            if ngram[0].isupper():
+                ngram_dict[ngram] *= question_bias
 
-            elif question_type == 4:
-                pattern = r"^(born|happen|borned|happened|occurred|occur)\b"
-                if ent.label_ in ["DATE", "TIME", "CARDINAL"]:
-                    ngram_dict[ngram] *= question_bias
-                if bool(re.search(pattern, ent.text.lower(), re.IGNORECASE)):
-                    ngram_dict[ngram] *= 8
+        elif question_type == 4:
+            pattern = r"^(born|happen|borned|happened|occurred|occur|january|february|march|april|may|june|july|august|september|october|november|december)\b"
+            if bool(re.search(pattern, ngram.lower(), re.IGNORECASE)):
+                ngram_dict[ngram] *= 8
+            if bool(re.search(r'\d+', ngram.lower(), re.IGNORECASE)):
+                ngram_dict[ngram] *= question_bias
 
-    median_score = np.percentile(list(ngram_dict.values()), 50)
+    median_score = np.percentile(list(ngram_dict.values()), 10)
     filter_dict = {k: v for k, v in ngram_dict.items() if v >= median_score}
     ngram_dict = filter_dict
 
@@ -259,18 +225,18 @@ def n_grams_filter(
     def remove_ngram(ngram):
         del ngram_dict[ngram]
 
-    ans_dict = {}
-    ans_list = []
+    ans_ngrams_dict = {}
+    ans_ngrams_list = []
 
     # Find starting ngram with highest score
-    ans = max(ngram_dict.items(), key=lambda x: x[1])[0]
-    ans_score = ngram_dict[ans]
-    ans_tokens = ngrams_list[ans]
+    first_ngram = max(ngram_dict.items(), key=lambda x: x[1])[0]
+    first_ngram_score = ngram_dict[first_ngram]
+    first_ngram_tokens = ngrams_list[first_ngram]
     sep = " "
-    logging.info(f'Starting with ngram "{ans}" with score {ans_score}')
-    ans_dict[ans] = ans_score
-    ans_list.append(ans_tokens)
-    remove_ngram(ans)
+    logging.info(f'Starting with ngram "{first_ngram}" with score {first_ngram_score}')
+    ans_ngrams_dict[first_ngram] = first_ngram_score
+    ans_ngrams_list.append(first_ngram_tokens)
+    remove_ngram(first_ngram)
 
     # while tile and ngram_dict:
     tile_result = True
@@ -278,42 +244,46 @@ def n_grams_filter(
         skip = False
         # Find ngram with highest score
         max_ngram = max(ngram_dict.items(), key=lambda x: x[1])[0]
-        max_score = ngram_dict[max_ngram]
-        max_tokens = ngrams_list[max_ngram]
+        max_ngram_score = ngram_dict[max_ngram]
+        max_ngram_tokens = ngrams_list[max_ngram]
 
         k = 0
-        ans_list = sorted(ans_list, key=lambda x: ans_dict[" ".join(x)], reverse=True)
-        while k < len(ans_list):
-            if all(elem in ans_list[k] for elem in max_tokens):
+        ans_ngrams_list = sorted(ans_ngrams_list, key=lambda x: ans_ngrams_dict[" ".join(x)], reverse=True)
+        while k < len(ans_ngrams_list):
+            # Check if ngram is a subset of ans_list[k]
+            if all(elem in ans_ngrams_list[k] for elem in max_ngram_tokens):
                 skip = True
                 remove_ngram(max_ngram)
                 break
             else:
-                tile_result = tile_ngrams(max_tokens, ans_list[k])
+                tile_result = tile_ngrams(max_ngram_tokens, ans_ngrams_list[k])
                 if tile_result:
-                    ans_list.append(tile_result)
+                    logging.info(
+                        f'Tiling "{max_ngram}" with "{sep.join(ans_ngrams_list[k])}" to get "{sep.join(tile_result)}"'
+                    )
+                    ans_ngrams_list.append(tile_result)
 
-                    ans_dict[sep.join(tile_result)] = (
-                        max_score + ans_dict[sep.join(ans_list[k])]
+                    ans_ngrams_dict[sep.join(tile_result)] = (
+                        max_ngram_score + ans_ngrams_dict[sep.join(ans_ngrams_list[k])]
                     )
 
-                    del ans_dict[sep.join(ans_list[k])]
-                    ans_list.remove(ans_list[k])
+                    del ans_ngrams_dict[sep.join(ans_ngrams_list[k])]
+                    ans_ngrams_list.remove(ans_ngrams_list[k])
                     remove_ngram(max_ngram)
-                    k = len(ans_list)
+                    k = len(ans_ngrams_list)
 
                 else:
                     k += 1
 
         if not tile_result and not skip:
-            ans_list.append(max_tokens)
-            ans_dict[max_ngram] = max_score
+            ans_ngrams_list.append(max_ngram_tokens)
+            ans_ngrams_dict[max_ngram] = max_ngram_score
 
             remove_ngram(max_ngram)
     # print("\nAnswer Dictionary:", ans_dict)
     # print('--'*50)
     # print("\nAnswer:", max(ans_dict, key = ans_dict.get))
-    raw_ans = max(ans_dict, key=ans_dict.get)
+    raw_ans = max(ans_ngrams_dict, key=ans_ngrams_dict.get)
 
     return raw_ans
 
@@ -344,7 +314,6 @@ def main():
     )
     questions = [
         "When was George Washington born",
-        "What is the capital of the United States",
         "Where is George Mason University",
         "Where is Taiwan",
         "Where is Japan",
@@ -376,7 +345,7 @@ def main():
         answer = n_grams_filter(documents, question_type, search_object)
         answer = answer.replace(". ", "")
         logging.info(f"Answer: {answer}")
-        Ans = tile_ngrams(query.split(" "), answer.split(" "))
+        Ans = tile_ngrams(answer.lower().split(" "), query.split(" "))
         if Ans:
             print("\nAnswer:", " ".join(Ans), "\n---------------")
         else:
