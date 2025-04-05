@@ -11,14 +11,15 @@ import re
 # Silence the GuessedAtParserWarning
 import warnings
 from bs4 import GuessedAtParserWarning
+
 warnings.filterwarnings("ignore", category=GuessedAtParserWarning)
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
 wikipedia.set_lang("en")
 
 # For reformulate the question
 nlp = spacy.load("en_core_web_sm")
-LOG_FILE = "qa_log.txt"
+
 
 def search_wiki(search_object: str) -> list[str]:
     """
@@ -32,18 +33,20 @@ def search_wiki(search_object: str) -> list[str]:
     """
     documents = []
     try:
-        results = wikipedia.search(search_object, results = 5)
+        results = wikipedia.search(search_object, results=1)
     except Exception:
-        # logging.error(f"Error: {e}")
         return documents
-    logging.info(f"Successfully Search the Number of item: {results}")
     for result in results:
         try:
-            documents.append(wikipedia.summary(result))
+            documents.append(wikipedia.summary(result, sentences=3))
+        except wikipedia.PageError as e:
+            print(f"\nPageError: {e}")
+            print("\nChange another search object.")
+            continue
         except Exception:
-            # logging.error(f"It wikipedia not our fault: \nError: {e}")
             continue
     return documents
+
 
 def data_cleaning(documents: list[str]) -> list[str]:
     """
@@ -58,11 +61,14 @@ def data_cleaning(documents: list[str]) -> list[str]:
     cleaned_docs = []
     for doc in documents:
         doc = nlp(doc)
-        filtered_tokens = [token.text for token in doc if not token.is_stop and not token.is_punct]
+        filtered_tokens = [
+            token.text for token in doc if not token.is_stop and not token.is_punct
+        ]
         cleaned_docs.append(" ".join(filtered_tokens))
     return cleaned_docs
 
-def prep_question(question: str) -> Tuple[str, str]:
+
+def prep_question(question: str) -> Tuple[str, str, int]:
     """
     Preprocess the question by removing the question type and transform it to the query for answer and objects to search.
 
@@ -70,216 +76,257 @@ def prep_question(question: str) -> Tuple[str, str]:
         question: The question to preprocess
 
     Returns:
-        Tuple[str, str]: The query and the object to search
+        Tuple[str, str, int]: The query, the object to search, and the question type
     """
     doc = nlp(question)
     if doc[-1].pos_ == "VERB":
         pattern = r"\b(is|are|was|were)\b"
         match = re.search(pattern, question)
-        pronoun = " ".join([token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]])
+        pronoun = " ".join(
+            [token.text for token in doc if token.pos_ in ["NOUN", "PROPN"]]
+        )
         verb = [token.text for token in doc if token.pos_ == "VERB"]
-        return f"{pronoun} {match.group(0)} {verb[0]} in", pronoun
+        if question.lower().startswith("who"):
+            _ = 1
+        elif question.lower().startswith("what"):
+            _ = 2
+        elif question.lower().startswith("where"):
+            _ = 3
+        elif question.lower().startswith("when"):
+            _ = 4
+        return f"{pronoun} {match.group(0)} {verb[0]}", pronoun, _
 
     elif question.lower().startswith("who"):
         pattern = r"(?i)who\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1), match.group(2)
+        return match.group(2) + " " + match.group(1), match.group(2), 1
 
     elif question.lower().startswith("what"):
         pattern = r"(?i)what\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1), match.group(2)
+        return match.group(2) + " " + match.group(1), match.group(2), 2
 
     elif question.lower().startswith("where"):
         pattern = r"(?i)where\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1) + " located in", match.group(2)
+        return match.group(2) + " " + match.group(1) + " located", match.group(2), 3
 
     elif question.lower().startswith("when"):
         pattern = r"(?i)when\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1) + " happen in", match.group(2)
+        return match.group(2) + " " + match.group(1) + " happen in", match.group(2), 4
 
     else:
         print("Invalid Question")
-        return None, None
-
-def normalize_tfidf(tfidf_matrix):
-    """
-    Normalize each document vector (row) in the TF-IDF matrix using L2 norm.
-    
-    Parameters:
-    - tfidf_matrix (numpy.ndarray): 2D array of shape (n_documents, n_terms)
-    
-    Returns:
-    - numpy.ndarray: The normalized TF-IDF matrix
-    """
-    norms = np.linalg.norm(tfidf_matrix, axis=1, keepdims=True)
-    
-    norms[norms == 0] = 1
-    
-    normalized_matrix = tfidf_matrix / norms
-    return normalized_matrix
-
-def tfidf(documents: list[str], query: str, normalization = False) -> np.ndarray:
-    """
-    Calculate the tfidf for the documents and the query.
-
-    Args:
-        documents: List of documents
-        query: The query
-
-    Returns:
-        np.ndarray: The tfidf matrix for the documents
-        np.ndarray: The tfidf vector for the query
-    """
-    clean_docs = data_cleaning(documents)
-    unique_words = {word for doc in clean_docs for word in doc.split()}
-    word_to_idx = {word: idx for idx, word in enumerate(unique_words)}
-    tf = np.zeros((len(clean_docs), len(unique_words)))
-    for idx, doc in enumerate(clean_docs):
-        for word in doc.split():
-            tf[idx, word_to_idx[word]] += 1
-    df = (tf != 0).sum(axis=0)
-    idf = np.log(len(clean_docs) / df) + 1
-    tfidf = tf * idf
-    query_tf = np.zeros((1, len(unique_words)))
-    for word in data_cleaning([query])[0].split():
-        if word in word_to_idx:
-            query_tf[0, word_to_idx[word]] += 1
-    query_vector = query_tf * idf
-    if normalization:
-        tfidf = normalize_tfidf(tfidf)
-    return tfidf, query_vector
-
-def cosine_similarity(vector_a: np.array, vector_b: np.array) -> float:
-    """
-    Calculate the cosine similarity between two vectors.
-    Cosine similarity measures how similar two vectors are by calculating the cosine of the angle between them.
-
-    Args:
-        vector_a: First vector (numpy array)
-        vector_b: Second vector (numpy array)
-
-    Returns:
-        float: Similarity score between -1 and 1
-               1: Vectors are identical
-               0: Vectors are perpendicular
-              -1: Vectors are opposite
-    """
-
-    dot_product = np.dot(vector_a, vector_b)
-
-    magnitude_a = np.linalg.norm(vector_a)
-    magnitude_b = np.linalg.norm(vector_b)
-    if magnitude_a == 0 or magnitude_b == 0:
-        return 0
-    similarity = dot_product / (magnitude_a * magnitude_b)
-
-    return similarity
-
-def top_k_scores(similarity: list[float], k: int) -> list[int]:
-    """
-    Return the top k scores.
-
-    Args:
-        similarity: List of similarity scores
-        k: The number of top scores to return
-
-    Returns:
-        list[int]: The indices of the top k scores
-    """
-    flat_scores = np.array([s[0] if s != 0 else 0 for s in similarity])
-    sorted_indices = np.argsort(flat_scores)[::-1]
-    top_k_indices = sorted_indices[:k]
-    return top_k_indices
+        return None, None, None
 
 
 def generate_ngrams(text, n) -> list[str]:
-    clean_text = re.sub(r'\([^)]*\)', '', text).strip()
-    n_grams = ngrams(nltk.word_tokenize(clean_text.lower()), n)
-    return [ ' '.join(grams) for grams in n_grams]
+    n_grams = ngrams(nltk.word_tokenize(text), n)
+    return [" ".join(grams) for grams in n_grams]
 
-def n_grams_filter(documents: list[str], query: str) -> list[str]:
-    n = len(query.split())
-    ans = []
-    while n > 0:
+
+def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]):
+    """
+    Tile two lists of strings together if ngram2 can be appended to ngram1 based on an overlapping segment.
+
+    Args:
+        ngram1: First list of strings (left side, assumed to have the higher score)
+        ngram2: Second list of strings (to be appended on the right)
+
+    Returns:
+        list[str]: Combined list if tiling is possible, None otherwise
+
+    Examples:
+        ['B', 'C', 'D'], ['A', 'B', 'C'], -> ['A', 'B', 'C', 'D']
+        ['I', 'will', 'always', 'love'], ['love', 'you'] -> ['love', 'you']  # since tiling is not on the right
+    """
+    # Handle containment cases
+    if len(ngram1) == 0:
+        return ans_ngrams.copy()
+    if len(ans_ngrams) == 0:
+        return ngram1.copy()
+
+    if all(elem in ans_ngrams for elem in ngram1):
+        return None
+
+    # Check for overlapping segments (only on the right side)
+    def find_overlap(list1, list2):
+        # Try different overlap sizes, from largest to smallest
+        for overlap_size in range(min(len(list1), len(list2)), 0, -1):
+            # Check if the end of list1 matches the start of list2
+            if list1[-overlap_size:] == list2[:overlap_size]:
+                return list1 + list2[overlap_size:]
+        return None
+
+    result = find_overlap(ans_ngrams, ngram1)
+    if result and len(result) > len(ans_ngrams):
+        return result
+
+    # No valid tiling extension found; return None to indicate that no tiling occurred
+    return None
+
+
+def n_grams_filter(documents: list[str], question_type: int, search_object: str) -> str:
+    all_ngram_dict = {}
+
+    # Generate all unigrams, bigrams and trigrams and count frequency in documents
+    for n in range(2, 5):
         for document in documents:
             n_grams = generate_ngrams(document, n)
+            for n_gram in n_grams:
+                if n_gram not in all_ngram_dict.keys():
+                    all_ngram_dict[n_gram] = n
 
-            if query.lower() in n_grams:
-                for idx, token in enumerate(n_grams):
+    # Re-score ngrams based on question type
+    question_bias = 3
+    """
+    Question types:
+    - 1: WHO
+    - 2: WHAT
+    - 3: WHERE
+    - 4: WHEN
+    """
+    all_ngrams = list(all_ngram_dict.keys())
+    for ngram in all_ngrams:
+        if question_type == 1:
+            pattern = r"\b(is|was|were|are)\b"
+            if bool(re.search(pattern, ngram, re.IGNORECASE)):
+                all_ngram_dict[ngram] *= 3
+            if ngram[0].isupper():
+                all_ngram_dict[ngram] *= question_bias
 
-                    if token == query.lower():
-                        k = 1
-                        while idx+k*n < len(n_grams) and "." not in n_grams[idx+k*n]:
-                            ans.append(n_grams[idx+k*n])
-                            k += 1
+        elif question_type == 2:
+            pattern = r"^(is|was|were|are)\b"
+            if bool(re.search(pattern, ngram, re.IGNORECASE)):
+                all_ngram_dict[ngram] *= question_bias
+            if search_object in ngram:
+                all_ngram_dict[ngram] *= 5
 
-                        if idx+k*n < len(n_grams):
-                            match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[idx+k*n])
-                        else:
-                            match = re.match(r'^(.*?\.\s*[^A-Z]|.*?\.$)', n_grams[-1])
+        elif question_type == 3:
+            pattern = r"^(located|nearby|near|locate|region|country|lies|between)\b"
+            if bool(re.search(pattern, ngram.lower(), re.IGNORECASE)):
+                all_ngram_dict[ngram] *= 8
+            if ngram[0].isupper():
+                all_ngram_dict[ngram] *= question_bias
 
-                        if match:
-                            ans.append(match.group(0))
-                        ans.append(".")
+        elif question_type == 4:
+            pattern = r"^(born|happen|borned|happened|occurred|occur|january|february|march|april|may|june|july|august|september|october|november|december)\b"
+            if bool(re.search(pattern, ngram.lower(), re.IGNORECASE)):
+                all_ngram_dict[ngram] *= 8
+            if bool(re.search(r"\d+", ngram.lower(), re.IGNORECASE)):
+                all_ngram_dict[ngram] *= question_bias
 
-                        return ans
-        n -= 1
-        query = " ".join(query.split()[-n:])
+    median_score = np.percentile(list(all_ngram_dict.values()), 50)
+    filter_dict = {k: v for k, v in all_ngram_dict.items() if v >= median_score}
+    all_ngram_dict = filter_dict
 
-    return ans
+    all_ngrams_list = {ngram: ngram.split() for ngram in all_ngram_dict.keys()}
 
-def log_write(message: str):
-    with open(LOG_FILE, "a") as file:
-        file.write(message + "\n")
+    # Function to remove ngram from dictionary
+    def remove_ngram(ngram):
+        del all_ngram_dict[ngram]
+
+    ans_ngrams_dict = {}
+    ans_ngrams_list = []
+
+    # Find starting ngram with highest score
+    first_ngram = max(all_ngram_dict.items(), key=lambda x: x[1])[0]
+    first_ngram_score = all_ngram_dict[first_ngram]
+    first_ngram_tokens = all_ngrams_list[first_ngram]
+    sep = " "
+    logging.info(f'Starting with ngram "{first_ngram}" with score {first_ngram_score}')
+
+    ans_ngrams_dict[first_ngram] = first_ngram_score
+    ans_ngrams_list.append(first_ngram_tokens)
+    remove_ngram(first_ngram)
+
+    pattern = r"\.\s*$"
+
+    while True:
+        for ngram, _ in all_ngram_dict.items():
+            tile_result = tile_ngrams(all_ngrams_list[ngram], ans_ngrams_list[0])
+
+            if tile_result:
+                ans_ngrams_list.pop()
+                ans_ngrams_list.append(tile_result)
+                remove_ngram(ngram)
+
+                # If there is a senetence end in a period stop tiling and return the result
+                if bool(re.search(pattern, sep.join(tile_result))):
+                    return sep.join(ans_ngrams_list[0])
+                break
+
+        if tile_result is None:
+            # No more ngrams to tile, return the result
+            return sep.join(ans_ngrams_list[0])
+
+
+def log_write(file, text, way="a"):
+    """
+    Write to the log file.
+
+    Args:
+        file: The file to write to
+        text: The text to write
+    """
+    with open(file, way) as f:
+        f.write(text)
+
 
 def main():
     if not os.path.exists(LOG_FILE):
-        with open(LOG_FILE, "w") as f:
-            f.write("QA System Log File\nThis is a QA system by YourName. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.\n")
-    
-    print("This is a QA system by Your Name. It will try to answer questions that start with Who, What, When or Where. Enter 'exit' to leave the program.")
+        log_write(
+            LOG_FILE,
+            "This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program.\n",
+            way="w",
+        )
 
+    print(
+        "This is a QA system by Group 5. It will try to answer questions that start with Who, What, When or Where.\nEnter 'exit' to leave the program."
+    )
     while True:
-        question = input("Please enter a question: ").replace("?", "")
-        log_write(f"Question: {question}")
-        if question == "exit":
-            print("Goodbye!")
-            with open(LOG_FILE, "a") as file:
-                file.write("Response: Goodbye!\n")
-            break
+        try:
+            question = input("Please enter a question: ").replace("?", "")
+            log_write(LOG_FILE, f"Question: {question}\n")
+            if question == "exit":
+                print("Goodbye!")
+                log_write(LOG_FILE, "Response: Goodbye!\n\n")
+                break
 
-        query, search_object = prep_question(question)
-        log_write(f"Search_Object: {search_object}")
-        logging.info(f"Answer format: {query}, Search Object: {search_object}")
+            query, search_object, question_type = prep_question(question)
+            query = query.lower()
+            log_write(LOG_FILE, f"Search_Object: {search_object}\n")
+            logging.info(f"Answer format: {query}, Search Object: {search_object}")
 
-        documents = search_wiki(search_object)
-        log_write(f"Documents: {documents}")
+            documents = data_cleaning(search_wiki(search_object))
+            if len(documents) == 0:
+                print("I am sorry, I don't know the answer.")
+                log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n\n")
+                continue
 
-        if len(documents) == 0:
-            print("I am sorry, I don't know the answer.")
-            log_write("Response: I am sorry, I don't know the answer.")
+            answer = n_grams_filter(documents, question_type, search_object)
+            answer = answer.replace(". ", "")
+            logging.info(f"Answer: {answer}")
+            
+            final_answer = tile_ngrams(answer.lower().split(" "), query.split(" "))
+            if final_answer:
+                print("\nAnswer:", " ".join(final_answer), "\n---------------")
+                log_write(LOG_FILE, f"Response: {' '.join(final_answer)}\n\n")
+            else:
+                print(
+                    "\nAnswer:",
+                    f"{query[0].upper()}{query[1:]} {answer}",
+                    "\n",
+                    "---------------" * 10,
+                )
+                log_write(
+                    LOG_FILE, f"Response: {query[0].upper()}{query[1:]} {answer}\n\n"
+                )
+        except Exception:
+            print("Please enter a valid question.")
+            log_write(LOG_FILE, "Response: Please enter a valid question.\n\n")
             continue
-        logging.info(f"Successfully Scrape the Number of Articles: {len(documents)}")
-        documents_vector, query_vector = tfidf(documents, query, normalization=True)
-        similarity = [cosine_similarity(query_vector, doc) for doc in documents_vector]
-        top_k_indices = top_k_scores(similarity, k = 3)
-        select_docs = [documents[idx] for idx in top_k_indices]
-        answer = n_grams_filter(select_docs, query)
-        logging.info(f"Answer: {answer}")
-        result = []
-        for sen in answer:
-            for word in sen.split():
-                if word not in result:
-                    result.append(word)
-        if len(result) > 0:
-            log_write(f"Response: {query} {' '.join(result)}")
-            print(f"{query[0].upper()}{query[1:]} {' '.join(result)}")
-        else:
-            log_write("Response: I am sorry, I don't know the answer.")
-            print("I am sorry, I don't know the answer.")
 
 
 if __name__ == "__main__":
