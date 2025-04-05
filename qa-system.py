@@ -317,6 +317,7 @@ def main():
         Ans = tile_ngrams(answer.lower().split(" "), query.split(" "))
         if Ans:
             print("\nAnswer:", " ".join(Ans), "\n---------------")
+            log_write(LOG_FILE, f"Response: {' '.join(Ans)}\n\n")
         else:
             print(
                 "\nAnswer:",
@@ -324,6 +325,7 @@ def main():
                 "\n",
                 "---------------" * 10,
             )
+            log_write(LOG_FILE, f"Response: {query[0].upper()}{query[1:]} {answer}\n\n")
 
 
 if __name__ == "__main__":
