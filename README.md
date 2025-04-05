@@ -7,3 +7,17 @@
 ## Optimal: Test different question to detect error.
 ## Optimal: Try different query methods and compare it.
 ## Optimal: If N-Gram Tiling fail use other method(word frequency)
+
+```python
+# Test questioins
+questions = [
+    "What is Python?",
+    "Where is George Mason University?",
+    "Who is Donald Trump?",
+    "Who is Barack Obama",
+    "Where is Taiwan?",
+    "Where is Japan?",
+    "When was George Washington born",
+    "When was the first iPhone released",
+]
+```
