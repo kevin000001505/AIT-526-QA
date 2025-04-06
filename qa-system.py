@@ -1,5 +1,7 @@
 import wikipedia
 from typing import Tuple
+import requests
+from pyquery import PyQuery as pq
 import logging
 import numpy as np
 import spacy
@@ -23,7 +25,7 @@ wikipedia.set_lang("en")
 nlp = spacy.load("en_core_web_sm")
 
 
-def search_wiki(search_object: str) -> list[str]:
+def search_wiki(search_object: str, question_type: int) -> list[str]:
     """
     Search for Wikipedia article and return the article.
 
@@ -40,10 +42,20 @@ def search_wiki(search_object: str) -> list[str]:
         return documents
     for result in results:
         try:
-            documents.append(wikipedia.summary(result, sentences=3))
+            if question_type == 2:
+                response = requests.get(f"https://en.wikipedia.org/wiki/{result}")
+                doc = pq(response.text)
+                document = doc("div.mw-content-ltr p").text().split("\n")[0]
+                documents.append(document)
+                log_write(LOG_FILE, f"Wikipedia Summary: {documents[0]}\n")
+            else:
+                documents.append(wikipedia.summary(result, sentences=3))
+                log_write(LOG_FILE, f"Wikipedia Summary: {documents[0]}\n")
         except wikipedia.PageError as e:
             print(f"\nPageError: {e}")
             print("\nChange to another search object.")
+            documents.append(wikipedia.summary(search_object, sentences=3))
+            log_write(LOG_FILE, f"Wikipedia Summary: {documents[0]}\n")
             continue
         except Exception:
             continue
@@ -81,7 +93,7 @@ def prep_question(question: str) -> Tuple[str, str, int]:
         Tuple[str, str]: The query and the object to search
     """
     doc = nlp(question)
-    if doc[-1].pos_ == "VERB":
+    if doc[-1].pos_ == "VERB" and not question.lower().startswith("what"):
         pattern = r"\b(is|are|was|were)\b"
         match = re.search(pattern, question)
         pronoun = " ".join(
@@ -173,7 +185,7 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
     all_ngram_dict = {}
 
     # Generate all unigrams, bigrams and trigrams and count frequency in documents
-    for n in range(2, 5):
+    for n in range(2, 4):
         for document in documents:
             n_grams = generate_ngrams(document, n)
             for n_gram in n_grams:
@@ -269,7 +281,7 @@ def answer(question: str):
     log_write(LOG_FILE, f"Search_Object: {search_object}\n")
     logging.info(f"Answer format: {query} Search Object: {search_object}")
 
-    documents = data_cleaning(search_wiki(search_object))
+    documents = data_cleaning(search_wiki(search_object, question_type))
     if len(documents) == 0:
         print("I am sorry, I don't know the answer.")
         log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n\n")

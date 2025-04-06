@@ -1,5 +1,6 @@
 *ipynb
 *pdf
-*.txt
+qa_log.txt
+test-questions.txt
 .DS_Store
 .env
