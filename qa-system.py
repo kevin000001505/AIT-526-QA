@@ -43,7 +43,7 @@ def search_wiki(search_object: str) -> list[str]:
             documents.append(wikipedia.summary(result, sentences=3))
         except wikipedia.PageError as e:
             print(f"\nPageError: {e}")
-            print("\nChange another search object.")
+            print("\nChange to another search object.")
             continue
         except Exception:
             continue
@@ -101,12 +101,12 @@ def prep_question(question: str) -> Tuple[str, str, int]:
     elif question.lower().startswith("who"):
         pattern = r"(?i)who\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1), match.group(2)
+        return match.group(2) + " " + match.group(1), match.group(2), 1
 
     elif question.lower().startswith("what"):
         pattern = r"(?i)what\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1), match.group(2)
+        return match.group(2) + " " + match.group(1), match.group(2), 2
 
     elif question.lower().startswith("where"):
         pattern = r"(?i)where\s+(is|was|are|were)\s+(.*)"
@@ -116,7 +116,7 @@ def prep_question(question: str) -> Tuple[str, str, int]:
     elif question.lower().startswith("when"):
         pattern = r"(?i)when\s+(is|was|are|were)\s+(.*)"
         match = re.search(pattern, question)
-        return match.group(2) + " " + match.group(1) + " happen in", match.group(2)
+        return match.group(2) + " " + match.group(1) + " happen in", match.group(2), 4
 
     else:
         print("Invalid Question")
@@ -281,7 +281,14 @@ def answer(question: str):
     
     final_answer = tile_ngrams(answer.lower().split(" "), query.split(" "))
     if final_answer:
-        print("\nAnswer:", " ".join(final_answer), "\n---------------")
+        print(
+            "-" * 100,
+            "\n",
+            "Answer:",
+            " ".join(final_answer),
+            "\n",
+            "-" * 100,
+        )
         log_write(LOG_FILE, f"Response: {' '.join(final_answer)}\n\n")
     else:
         print(
@@ -329,14 +336,14 @@ def main():
                 break
             elif question == "test":
                 with open("test-questions.txt", "r") as file:
-                    lines = file.readlines()
-                    for line in lines:
-                        print(line[:-1])
+                    for line in file:
+                        print("*** TEST QUESTION: ", line[:-1], " ***")
                         answer(line[:-1])
 
             answer(question)
 
-        except Exception:
+        except Exception as e:
+            logging.info(e)
             print("Please enter a valid question.")
             log_write(LOG_FILE, "Response: Please enter a valid question.\n\n")
             continue
