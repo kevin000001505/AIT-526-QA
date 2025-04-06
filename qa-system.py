@@ -8,6 +8,8 @@ from nltk.util import ngrams
 import os
 import re
 
+LOG_FILE = "qa_log.txt"
+
 # Silence the GuessedAtParserWarning
 import warnings
 from bs4 import GuessedAtParserWarning
@@ -261,6 +263,38 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
             # No more ngrams to tile, return the result
             return sep.join(ans_ngrams_list[0])
 
+def answer(question: str):
+    query, search_object, question_type = prep_question(question)
+    query = query.lower()
+    log_write(LOG_FILE, f"Search_Object: {search_object}\n")
+    logging.info(f"Answer format: {query}, Search Object: {search_object}")
+
+    documents = data_cleaning(search_wiki(search_object))
+    if len(documents) == 0:
+        print("I am sorry, I don't know the answer.")
+        log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n\n")
+        return
+
+    answer = n_grams_filter(documents, question_type, search_object)
+    answer = answer.replace(". ", "")
+    logging.info(f"Answer: {answer}")
+    
+    final_answer = tile_ngrams(answer.lower().split(" "), query.split(" "))
+    if final_answer:
+        print("\nAnswer:", " ".join(final_answer), "\n---------------")
+        log_write(LOG_FILE, f"Response: {' '.join(final_answer)}\n\n")
+    else:
+        print(
+            "-" * 100,
+            "\n",
+            "Answer:",
+            f"{query[0].upper()}{query[1:]} {answer}",
+            "\n",
+            "-" * 100,
+        )
+        log_write(
+            LOG_FILE, f"Response: {query[0].upper()}{query[1:]} {answer}\n\n"
+        )
 
 def log_write(file, text, way="a"):
     """
@@ -275,7 +309,6 @@ def log_write(file, text, way="a"):
 
 
 def main():
-    LOG_FILE = "qa_log.txt"
     if not os.path.exists(LOG_FILE):
         log_write(
             LOG_FILE,
@@ -294,36 +327,15 @@ def main():
                 print("Goodbye!")
                 log_write(LOG_FILE, "Response: Goodbye!\n\n")
                 break
+            elif question == "test":
+                with open("test-questions.txt", "r") as file:
+                    lines = file.readlines()
+                    for line in lines:
+                        print(line[:-1])
+                        answer(line[:-1])
 
-            query, search_object, question_type = prep_question(question)
-            query = query.lower()
-            log_write(LOG_FILE, f"Search_Object: {search_object}\n")
-            logging.info(f"Answer format: {query}, Search Object: {search_object}")
+            answer(question)
 
-            documents = data_cleaning(search_wiki(search_object))
-            if len(documents) == 0:
-                print("I am sorry, I don't know the answer.")
-                log_write(LOG_FILE, "Response: I am sorry, I don't know the answer.\n\n")
-                continue
-
-            answer = n_grams_filter(documents, question_type, search_object)
-            answer = answer.replace(". ", "")
-            logging.info(f"Answer: {answer}")
-            
-            final_answer = tile_ngrams(answer.lower().split(" "), query.split(" "))
-            if final_answer:
-                print("\nAnswer:", " ".join(final_answer), "\n---------------")
-                log_write(LOG_FILE, f"Response: {' '.join(final_answer)}\n\n")
-            else:
-                print(
-                    "\nAnswer:",
-                    f"{query[0].upper()}{query[1:]} {answer}",
-                    "\n",
-                    "---------------" * 10,
-                )
-                log_write(
-                    LOG_FILE, f"Response: {query[0].upper()}{query[1:]} {answer}\n\n"
-                )
         except Exception:
             print("Please enter a valid question.")
             log_write(LOG_FILE, "Response: Please enter a valid question.\n\n")
