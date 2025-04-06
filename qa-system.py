@@ -220,8 +220,8 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
                 all_ngram_dict[ngram] *= question_bias
 
     median_score = np.percentile(list(all_ngram_dict.values()), 50)
-    filter_dict = {k: v for k, v in all_ngram_dict.items() if v >= median_score}
-    all_ngram_dict = filter_dict
+    # Filter out ngrams with a score below the median
+    all_ngram_dict = {k: v for k, v in all_ngram_dict.items() if v >= median_score}
 
     all_ngrams_list = {ngram: ngram.split() for ngram in all_ngram_dict.keys()}
 
@@ -267,7 +267,7 @@ def answer(question: str):
     query, search_object, question_type = prep_question(question)
     query = query.lower()
     log_write(LOG_FILE, f"Search_Object: {search_object}\n")
-    logging.info(f"Answer format: {query}, Search Object: {search_object}")
+    logging.info(f"Answer format: {query} Search Object: {search_object}")
 
     documents = data_cleaning(search_wiki(search_object))
     if len(documents) == 0:
@@ -276,7 +276,6 @@ def answer(question: str):
         return
 
     answer = n_grams_filter(documents, question_type, search_object)
-    answer = answer.replace(". ", "")
     logging.info(f"Answer: {answer}")
     
     final_answer = tile_ngrams(answer.lower().split(" "), query.split(" "))
@@ -285,22 +284,22 @@ def answer(question: str):
             "-" * 100,
             "\n",
             "Answer:",
-            " ".join(final_answer),
+            " ".join(final_answer).capitalize(),
             "\n",
             "-" * 100,
         )
-        log_write(LOG_FILE, f"Response: {' '.join(final_answer)}\n\n")
+        log_write(LOG_FILE, f"Response: {' '.join(final_answer).capitalize()}\n\n")
     else:
         print(
             "-" * 100,
             "\n",
             "Answer:",
-            f"{query[0].upper()}{query[1:]} {answer}",
+            f"{query.capitalize()} {answer}",
             "\n",
             "-" * 100,
         )
         log_write(
-            LOG_FILE, f"Response: {query[0].upper()}{query[1:]} {answer}\n\n"
+            LOG_FILE, f"Response: {query.capitalize()} {answer}\n\n"
         )
 
 def log_write(file, text, way="a"):
