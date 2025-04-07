@@ -1,98 +1,98 @@
 Question: What is coffee
-Correct Answer :
+Correct Answer : Coffee is roasted ground coffee beans.
 My System Answer : Coffee is roasted ground coffee beans.
 
 
 Question: What is computer
-Correct Answer :
-My System Answer : Computer is computer machine programmed automatically carry sequences arithmetic logical operations computation
+Correct Answer : Computer is machine programmed automatically carry sequences arithmetic logical operations computation
+My System Answer : Computer is machine programmed automatically carry sequences arithmetic logical operations computation
 
 
-Question: What is train
-Correct Answer :
-My System Answer : Train is train Old French trahiner Latin trahere pull draw '' ) [ 1 series connected vehicles run railway track transport people freight
+Question: What is train #
+Correct Answer : Train is a series of connected vehicles that run along a railway track and transport people or freight. 
+My System Answer : Train is Old French trahiner Latin trahere pull draw '' ) [ 1 series connected vehicles run railway track transport people freight
 
 
-Question: What is Google
-Correct Answer :
-My System Answer : Google is Google LLC /ˈɡuːɡəl/ ⓘ GOO gəl American multinational corporation technology company focusing online advertising search engine technology cloud computing computer software quantum computing e commerce consumer electronics artificial intelligence AI
+Question: What is Google #
+Correct Answer : Google is an American multinational corporation technology company focusing online advertising search engine technology cloud computing computer software quantum computing e commerce consumer electronics artificial intelligence AI
+My System Answer : Google is LLC /ˈɡuːɡəl/ ⓘ GOO gəl American multinational corporation technology company focusing online advertising search engine technology cloud computing computer software quantum computing e commerce consumer electronics artificial intelligence AI
 
 
 Question: What is NBA
-Correct Answer :
+Correct Answer : Nba is Basketball Association NBA professional basketball league North America composed 30 teams 29 United States 1 Canada.
 My System Answer : Nba is Basketball Association NBA professional basketball league North America composed 30 teams 29 United States 1 Canada
 
 
 Question: Who is Donald Trump
-Correct Answer :
+Correct Answer : Donald trump is Donald John Trump born June 14 1946 American politician media personality businessman 47th president United States member Republican Party served 45th president 2017 2021 Born New York City Trump graduated University Pennsylvania 1968 bachelor degree economics
 My System Answer : Donald trump is Donald John Trump born June 14 1946 American politician media personality businessman 47th president United States member Republican Party served 45th president 2017 2021 Born New York City Trump graduated University Pennsylvania 1968 bachelor degree economics
 
 
 Question: Who is Barack Obama
-Correct Answer :
+Correct Answer : Barack obama is Barack Hussein Obama II born August 4 1961 American politician 44th president United States 2009 2017 member Democratic Party African
 My System Answer : Barack obama is Barack Hussein Obama II born August 4 1961 American politician 44th president United States 2009 2017 member Democratic Party African
 
 
-Question: Who is Gordon James Ramsay
-Correct Answer :
-My System Answer : Gordon james ramsay is Gordon James Ramsay born 1966 11 08 ) 8 November 1966 British celebrity chef restaurateur television presenter writer restaurant group
+Question: Who is Gordon James Ramsay #
+Correct Answer : Gordon james ramsay is born 1966 11 08 British celebrity chef restaurateur television presenter writer restaurant group
+My System Answer : Gordon james ramsay is born 1966 11 08 ) 8 November 1966 British celebrity chef restaurateur television presenter writer restaurant group
 
 
 Question: Who is Kobe Bean Bryant
-Correct Answer :
-My System Answer : Kobe bean bryant is Kobe Bean Bryant KOH bee August 23 1978 January 26 2020 American professional basketball player shooting guard spent entire 20 year career Los Angeles Lakers National Basketball Association NBA Widely regarded sport greatest influential players Bryant won NBA championships 18 time Star 4
+Correct Answer : Kobe bean bryant is KOH bee August 23 1978 January 26 2020 American professional basketball player shooting guard spent entire 20 year career Los Angeles Lakers National Basketball Association NBA Widely regarded sport greatest influential players Bryant won NBA championships 18 time Star 4
+My System Answer : Kobe bean bryant is KOH bee August 23 1978 January 26 2020 American professional basketball player shooting guard spent entire 20 year career Los Angeles Lakers National Basketball Association NBA Widely regarded sport greatest influential players Bryant won NBA championships 18 time Star 4
 
 
 Question: Who is Giannis Sina Ugo Antetokounmpo
-Correct Answer :
-My System Answer : Giannis sina ugo antetokounmpo is Giannis Sina Ugo Antetokounmpo né Adetokunbo born December 6 1994 Nigerian Greek professional basketball player Milwaukee Bucks National Basketball Association NBA size speed strength country origin earned nickname Greek Freak widely regarded greatest power forwards time greatest players
+Correct Answer : Giannis sina ugo antetokounmpo is né Adetokunbo born December 6 1994 Nigerian Greek professional basketball player Milwaukee Bucks National Basketball Association NBA size speed strength country origin earned nickname Greek Freak widely regarded greatest power forwards time greatest players
+My System Answer : Giannis sina ugo antetokounmpo is né Adetokunbo born December 6 1994 Nigerian Greek professional basketball player Milwaukee Bucks National Basketball Association NBA size speed strength country origin earned nickname Greek Freak widely regarded greatest power forwards time greatest players
 
 
-Question: Where is George Mason University
-Correct Answer :
+Question: Where is George Mason University #
+Correct Answer : George mason university is located northern virginia united states
 My System Answer : George mason university is located northern virginia united states university founded
 
 
-Question: Where is Taiwan
-Correct Answer :
+Question: Where is Taiwan #
+Correct Answer : Taiwan is located in East Asia main island
 My System Answer : Taiwan is located country East Asia main island Taiwan officially Republic China ROC
 
 
-Question: Where is Japan
-Correct Answer :
+Question: Where is Japan #
+Correct Answer : Japan is located pacific ocean northeast coast asian mainland bordered west sea 
 My System Answer : Japan is located pacific ocean northeast coast asian mainland bordered west sea japan island country east asia
 
 
-Question: Where is Fairfax city
-Correct Answer :
+Question: Where is Fairfax city #
+Correct Answer : Fairfax city is located Fairfax Virginia FAIR
 My System Answer : Fairfax city is located Fairfax Virginia FAIR faks independent
 
 
-Question: Where is The Metropolitan Museum of Art
-Correct Answer :
-My System Answer : The metropolitan museum of art is located Metropolitan Museum Art colloquially referred Met encyclopedic art museum New York City floor area fourth largest museum world
+Question: Where is White House
+Correct Answer : White house is located 1600 pennsylvania avenue nw washington d.c. 
+My System Answer : White house is located 1600 pennsylvania avenue nw washington d.c. 
 
 
 Question: When was George Washington born
-Correct Answer :
+Correct Answer : George washington was born February 22 1732 O.S .
 My System Answer : George washington was born February 22 1732 O.S .
 
 
-Question: When was the first iphone released
-Correct Answer :
+Question: When was the first iphone released #
+Correct Answer : Iphone was released January 9 2007 Macworld 2007
 My System Answer : Iphone was released January 9 2007 Macworld 2007 launched later year Apple run iOS company mobile operating system generation iPhone 16 Plus alongside higher end iPhone 16e
 
 
 Question: When was the World War one
-Correct Answer :
+Correct Answer : The world war one was happen in September 1939 2 September 1945 global conflict coalitions Allies Axis powers Nearly world countries participated nations mobilising resources pursuit total war Tanks aircraft played major roles enabling strategic bombing cities delivery nuclear weapons
 My System Answer : The world war one was happen in September 1939 2 September 1945 global conflict coalitions Allies Axis powers Nearly world countries participated nations mobilising resources pursuit total war Tanks aircraft played major roles enabling strategic bombing cities delivery nuclear weapons
 
 
-Question: When was Mahatma Gandhi assassinated?
-Correct Answer :
-My System Answer : Mahatma gandhi was assassinated October 1869 30 January 1948 Indian lawyer anti colonial nationalist political ethicist employed nonviolent resistance lead successful campaign India independence British rule inspired movements civil rights freedom world honorific Mahātmā Sanskrit meaning great souled venerable applied South Africa 1914
+Question: When was Martin Luther King, Jr born? #
+Correct Answer : Martin luther king jr was born January 15
+My System Answer : Martin luther king jr was born January 15 1929 April 4 1968 American Baptist minister activist political philosopher prominent leaders civil rights movement 1955 assassination 1968 advanced
 
 
-Question: When was the Titanic sink?
-Correct Answer :
-My System Answer : The titanic sin was happen in culture sinking 1912 loss 1,500 2,224 lives board disaster Titanic played prominent role popular
+Question: When was Donald Trump born? #
+Correct Answer : Donald trump was born june 14 1946
+My System Answer : Donald trump was born june 14 1946 american politician media personality businessman 47th president 2017 2021 born new york city trump graduated university pennsylvania 1968 bachelor degree economics
