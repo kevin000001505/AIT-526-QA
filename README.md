@@ -1,5 +1,10 @@
 # AIT 526
 
+### We directly scrape the waht-question because wikipedia summary can't get the result by single object, such as: coffee, train or truck.
+### We score the ngrams by it n, question-related type and the keywords.
+### We get the highest score of ngrams and start to tile it with other ngrams until there is no ngrams can tile with it. 
+### We only tile the reight side of the highest score ngram.
+
 ```python
 # Test questioins
 questions = [
