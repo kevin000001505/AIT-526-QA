@@ -45,7 +45,7 @@ def search_wiki(search_object: str, question_type: int) -> list[str]:
             if question_type == 2:
                 response = requests.get(f"https://en.wikipedia.org/wiki/{result}")
                 doc = pq(response.text)
-                document = doc("div.mw-content-ltr p").text().split("\n")[0]
+                document = doc("div.mw-content-ltr p").text().split(".")[0]
                 documents.append(document)
                 log_write(LOG_FILE, f"Wikipedia Summary: {documents[0]}\n")
             else:
@@ -153,7 +153,7 @@ def tile_ngrams(ngram1: list[str], ans_ngrams: list[str]):
 
     Examples:
         ['B', 'C', 'D'], ['A', 'B', 'C'], -> ['A', 'B', 'C', 'D']
-        ['I', 'will', 'always', 'love'], ['love', 'you'] -> ['love', 'you']  # since tiling is not on the right
+        ['I', 'will', 'always', 'love'], ['love', 'you'] -> ['love', 'you']
     """
     # Handle containment cases
     if len(ngram1) == 0:
@@ -206,7 +206,7 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
         if question_type == 1:
             pattern = r"\b(is|was|were|are)\b"
             if bool(re.search(pattern, ngram, re.IGNORECASE)):
-                all_ngram_dict[ngram] *= 3
+                all_ngram_dict[ngram] *= 5
             if ngram[0].isupper():
                 all_ngram_dict[ngram] *= question_bias
 
@@ -215,7 +215,7 @@ def n_grams_filter(documents: list[str], question_type: int, search_object: str)
             if bool(re.search(pattern, ngram, re.IGNORECASE)):
                 all_ngram_dict[ngram] *= question_bias
             if search_object in ngram:
-                all_ngram_dict[ngram] *= 5
+                all_ngram_dict[ngram] *= question_bias
 
         elif question_type == 3:
             pattern = r"^(located|nearby|near|locate|region|country|lies|between)\b"
@@ -288,7 +288,6 @@ def answer(question: str):
         return
 
     answer = n_grams_filter(documents, question_type, search_object)
-    logging.info(f"Answer: {answer}")
     
     final_answer = tile_ngrams(answer.lower().split(" "), query.split(" "))
     if final_answer:
@@ -302,6 +301,10 @@ def answer(question: str):
         )
         log_write(LOG_FILE, f"Response: {' '.join(final_answer).capitalize()}\n\n")
     else:
+        if search_object.lower() in answer.lower():
+            search_object_length = len(search_object.split(" "))
+            if answer.lower().split(" ")[:search_object_length] == search_object.lower().split(" "):
+                answer = " ".join(answer.split()[search_object_length:])
         print(
             "-" * 100,
             "\n",
